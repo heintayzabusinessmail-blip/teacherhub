@@ -5,6 +5,7 @@ import {
   CheckSquare,
   ClipboardList,
   Compass,
+  Eye,
   FolderOpen,
   GraduationCap,
   Home,
@@ -54,11 +55,12 @@ const ALL_NAV_ITEMS: NavItemDef[] = [
 const MOBILE_PRIMARY_TABS: NavTab[] = ['home', 'plan', 'resources', 'my-month-1'];
 
 export function AppShell({ activeTab, onSelectTab, children }: AppShellProps) {
-  const { myProfile, user, isAdmin, darkMode, toggleDarkMode } = useHub();
+  const { myProfile, user, isPrimaryOwner, isAdmin, isViewer, darkMode, toggleDarkMode } = useHub();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const visibleItems = ALL_NAV_ITEMS.filter((item) => item.group !== 'admin' || isAdmin);
-  const displayName = myProfile?.displayName || user?.displayName || 'YAO Teacher';
+  const displayName =
+    myProfile?.displayName || user?.displayName || (isViewer ? 'Guest Viewer' : 'YAO Teacher');
 
   const handleNavClick = (tab: NavTab) => {
     onSelectTab(tab);
@@ -148,7 +150,13 @@ export function AppShell({ activeTab, onSelectTab, children }: AppShellProps) {
                 {displayName}
               </p>
               <p className="text-[11px] text-[#5A4A66] dark:text-[#BBAAC9]">
-                {isAdmin ? 'Admin · Coordinator' : 'YAO Teacher'}
+                {isPrimaryOwner
+                  ? 'Owner · Full Edit'
+                  : isAdmin
+                    ? 'Editor · Full Edit'
+                    : isViewer
+                      ? 'View Only'
+                      : 'YAO Teacher'}
               </p>
             </div>
           </div>
@@ -232,6 +240,16 @@ export function AppShell({ activeTab, onSelectTab, children }: AppShellProps) {
         </div>
 
         <main className="flex-1 w-full max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 pb-24 lg:pb-12">
+          {isViewer && (
+            <div className="mb-5 px-4 py-2.5 rounded-xl bg-white dark:bg-[#1F1629] border border-[#E5D9EC] dark:border-[#332442] flex items-center gap-2.5 text-xs text-[#5A4A66] dark:text-[#C5B4D4] no-print">
+              <Eye className="w-4 h-4 text-[#A8567F] shrink-0" />
+              <span>
+                <strong className="text-[#1F122B] dark:text-[#F5EEF9]">View-only access:</strong>{' '}
+                You can read all pages and download PDFs. Only Tr Hein (or approved editors) can
+                make changes.
+              </span>
+            </div>
+          )}
           {children}
         </main>
 

@@ -20,7 +20,7 @@ import { signOutUser } from './firebase';
 import type { NavTab } from './types';
 
 function HubRouter() {
-  const { user, authLoading, isAllowed, myProfile, profileLoaded, syncError } = useHub();
+  const { user, authLoading, isAllowed, isViewer, myProfile, profileLoaded, syncError } = useHub();
   const [activeTab, setActiveTab] = useState<NavTab>('home');
 
   if (syncError) {
@@ -75,8 +75,8 @@ function HubRouter() {
     );
   }
 
-  // First-login 2-minute onboarding if the teacher has not created their team card yet
-  if (!myProfile || !myProfile.onboardingComplete) {
+  // First-login 2-minute onboarding for teachers/admins who have not created their team card yet (view-only users skip)
+  if (!isViewer && (!myProfile || !myProfile.onboardingComplete)) {
     return <OnboardingModal />;
   }
 

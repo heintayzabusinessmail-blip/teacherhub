@@ -3,7 +3,6 @@ import {
   ArrowRight,
   CalendarClock,
   CheckCircle2,
-  Database,
   Download,
   Edit3,
   GraduationCap,
@@ -19,7 +18,6 @@ import { useHub } from '../context/HubContext';
 import { PAGE_SUMMARIES } from '../content/planContent';
 import { PageHeader } from '../components/PageHeader';
 import { downloadIcsEvent, formatLocalDateTime } from '../utils/helpers';
-import { seedFictionalSampleData } from '../utils/seedData';
 import type { NavTab } from '../types';
 
 interface HomePageProps {
@@ -38,14 +36,12 @@ export function HomePage({ onNavigate }: HomePageProps) {
     oneToOneSlots,
     observations,
     mySurvey,
-    hasSampleData,
   } = useHub();
 
   const [editingPinned, setEditingPinned] = useState(false);
   const [pinnedTitle, setPinnedTitle] = useState('');
   const [pinnedBody, setPinnedBody] = useState('');
   const [savingPinned, setSavingPinned] = useState(false);
-  const [seeding, setSeeding] = useState(false);
 
   const displayName = myProfile?.displayName || user?.displayName || 'Teacher';
   const pinned = hubConfig['pinned'];
@@ -161,53 +157,12 @@ export function HomePage({ onNavigate }: HomePageProps) {
     }
   };
 
-  const handleSeedDemo = async () => {
-    if (!user || !user.email) return;
-    setSeeding(true);
-    try {
-      await seedFictionalSampleData(user.uid, user.email, displayName);
-    } finally {
-      setSeeding(false);
-    }
-  };
-
-  const isEmptyHub =
-    !hasSampleData &&
-    trainingSessions.length === 0 &&
-    oneToOneSlots.length === 0 &&
-    !pinned;
-
   return (
     <div className="space-y-6">
       <PageHeader
         title={`Hello, ${displayName}`}
         inShort={PAGE_SUMMARIES.home}
       />
-
-      {/* Admin quick-seed prompt when database is brand new */}
-      {isAdmin && isEmptyHub && (
-        <section className="bg-white dark:bg-[#1F1629] rounded-2xl border border-[#A8567F]/40 p-5 sm:p-6 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="space-y-1">
-            <h2 className="text-base font-bold text-[#3B1050] dark:text-[#E8D5F5] flex items-center gap-2">
-              <Database className="w-4 h-4 text-[#A8567F]" />
-              Fresh Hub Ready — Load Fictional Sample Data to Test?
-            </h2>
-            <p className="text-sm text-[#5A4A66] dark:text-[#BBAAC9]">
-              Populate sample teachers, resources, training workshops, curriculum maps, slots, and FAQs
-              so you can test every feature right away. You can delete all sample data in one click
-              from the Admin Dashboard.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={handleSeedDemo}
-            disabled={seeding}
-            className="min-h-[44px] px-4 py-2.5 rounded-xl bg-[#3B1050] hover:bg-[#4E1869] text-white text-sm font-semibold whitespace-nowrap shrink-0 transition-colors disabled:opacity-60"
-          >
-            {seeding ? 'Loading sample data...' : 'Load Sample Data'}
-          </button>
-        </section>
-      )}
 
       {/* Pinned Message from Tr Hein */}
       <section className="bg-white dark:bg-[#1F1629] rounded-2xl border border-[#E5D9EC] dark:border-[#332442] p-5 sm:p-6 shadow-sm space-y-3">

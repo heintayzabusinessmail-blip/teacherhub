@@ -26,7 +26,7 @@ import { PageHeader } from '../components/PageHeader';
 import type { FaqItem } from '../types';
 
 export function VoicePage() {
-  const { user, isAdmin, myProfile, mySurvey, faqs, suggestions } = useHub();
+  const { user, isAdmin, canInteract, myProfile, mySurvey, faqs, suggestions } = useHub();
 
   // 1. Month 1 Needs Survey State
   const [selectedTopics, setSelectedTopics] = useState<string[]>([]);
@@ -322,13 +322,19 @@ export function VoicePage() {
                 Visible only to you, Tr Hein, and the Founder.
               </span>
             )}
-            <button
-              type="submit"
-              disabled={savingSurvey}
-              className="min-h-[44px] px-5 py-2.5 rounded-xl bg-[#3B1050] hover:bg-[#4E1869] text-white text-sm font-semibold disabled:opacity-60"
-            >
-              {savingSurvey ? 'Saving...' : mySurvey ? 'Update my survey' : 'Submit survey'}
-            </button>
+            {canInteract ? (
+              <button
+                type="submit"
+                disabled={savingSurvey}
+                className="min-h-[44px] px-5 py-2.5 rounded-xl bg-[#3B1050] hover:bg-[#4E1869] text-white text-sm font-semibold disabled:opacity-60"
+              >
+                {savingSurvey ? 'Saving...' : mySurvey ? 'Update my survey' : 'Submit survey'}
+              </button>
+            ) : (
+              <span className="text-xs font-medium text-[#7A6888] dark:text-[#9D8AAD]">
+                View-only mode
+              </span>
+            )}
           </div>
         </form>
       </section>
@@ -346,14 +352,16 @@ export function VoicePage() {
               question you can use directly in class.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => setShowAskFaq((v) => !v)}
-            className="min-h-[44px] inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#3B1050] hover:bg-[#4E1869] text-white text-sm font-semibold whitespace-nowrap shrink-0"
-          >
-            <Plus className="w-4 h-4" />
-            Ask a student question
-          </button>
+          {canInteract && (
+            <button
+              type="button"
+              onClick={() => setShowAskFaq((v) => !v)}
+              className="min-h-[44px] inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#3B1050] hover:bg-[#4E1869] text-white text-sm font-semibold whitespace-nowrap shrink-0"
+            >
+              <Plus className="w-4 h-4" />
+              Ask a student question
+            </button>
+          )}
         </div>
 
         {showAskFaq && (
@@ -455,13 +463,15 @@ export function VoicePage() {
                         {faq.question}
                       </h3>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => (isAnswering ? setAnsweringFaqId(null) : openAnswerFaq(faq))}
-                      className="text-xs font-semibold text-[#3B1050] dark:text-[#E2B8D0] hover:underline shrink-0"
-                    >
-                      {isAnswering ? 'Close' : faq.status === 'answered' ? 'Improve answer' : 'Write answer'}
-                    </button>
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => (isAnswering ? setAnsweringFaqId(null) : openAnswerFaq(faq))}
+                        className="text-xs font-semibold text-[#3B1050] dark:text-[#E2B8D0] hover:underline shrink-0"
+                      >
+                        {isAnswering ? 'Close' : faq.status === 'answered' ? 'Improve answer' : 'Write answer'}
+                      </button>
+                    )}
                   </div>
 
                   {faq.status === 'answered' && !isAnswering && (
@@ -609,14 +619,20 @@ export function VoicePage() {
                 Please do not include student names or phone numbers.
               </span>
             )}
-            <button
-              type="submit"
-              disabled={sendingSug || !sugMessage.trim()}
-              className="min-h-[44px] inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#A8567F] hover:bg-[#91446A] text-white text-sm font-semibold disabled:opacity-50"
-            >
-              <Send className="w-4 h-4" />
-              {sendingSug ? 'Sending...' : 'Send anonymously'}
-            </button>
+            {canInteract ? (
+              <button
+                type="submit"
+                disabled={sendingSug || !sugMessage.trim()}
+                className="min-h-[44px] inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#A8567F] hover:bg-[#91446A] text-white text-sm font-semibold disabled:opacity-50"
+              >
+                <Send className="w-4 h-4" />
+                {sendingSug ? 'Sending...' : 'Send anonymously'}
+              </button>
+            ) : (
+              <span className="text-xs font-medium text-[#7A6888] dark:text-[#9D8AAD]">
+                View-only mode
+              </span>
+            )}
           </div>
         </form>
 

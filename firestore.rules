@@ -50,10 +50,15 @@ service cloud.firestore {
     }
 
     function isAllowedUser() {
-      return isBootstrappedAdmin()
+      return isVerified();
+    }
+
+    function isInteractiveUser() {
+      return isAdmin()
         || (
           isVerified()
           && exists(/databases/$(database)/documents/allowlist/$(myEmailKey()))
+          && get(/databases/$(database)/documents/allowlist/$(myEmailKey())).data.role == 'teacher'
         );
     }
 
@@ -75,7 +80,7 @@ service cloud.firestore {
       return data.keys().hasAll(['email', 'role', 'displayName', 'addedBy', 'isSample', 'createdAt', 'updatedAt'])
         && data.keys().hasOnly(['email', 'role', 'displayName', 'addedBy', 'isSample', 'createdAt', 'updatedAt'])
         && isValidString(data.email, 5, 200)
-        && data.role in ['admin', 'teacher']
+        && data.role in ['admin', 'teacher', 'viewer']
         && isValidString(data.displayName, 1, 120)
         && isValidString(data.addedBy, 1, 128)
         && data.isSample is bool
@@ -420,31 +425,31 @@ service cloud.firestore {
     // Collection Match Blocks (All 15 Collections Secured)
     // =========================================================================
 
-    // 1. Allowlist (Contains PII: email — strictly isolated)
+    // 1. Allowlist (Contains PII: email — strictly isolated; ONLY primary owner can manage access/roles)
     match /allowlist/{entryId} {
       allow get: if isVerified() && isValidId(entryId) && (entryId == myEmailKey() || isAdmin());
       allow list: if isAdmin();
-      allow create: if isAdmin() && isValidId(entryId)
+      allow create: if isBootstrappedAdmin() && isValidId(entryId)
         && isValidAllowlistEntry(incoming())
         && incoming().createdAt == request.time
         && incoming().updatedAt == request.time;
-      allow update: if isAdmin() && isValidId(entryId)
+      allow update: if isBootstrappedAdmin() && isValidId(entryId)
         && isValidAllowlistEntry(incoming())
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time;
-      allow delete: if isAdmin() && isValidId(entryId);
+      allow delete: if isBootstrappedAdmin() && isValidId(entryId);
     }
 
-    // 2. Teacher Directory Profiles (Zero PII — shared across allowlisted YAO teachers)
+    // 2. Teacher Directory Profiles (Zero PII — shared across allowlisted YAO team; viewers are read-only)
     match /teachers/{uid} {
       allow get: if isAllowedUser() && isValidId(uid);
       allow list: if isAllowedUser();
-      allow create: if isAllowedUser() && isValidId(uid)
+      allow create: if isInteractiveUser() && isValidId(uid)
         && isValidTeacherProfile(incoming())
         && incoming().createdAt == request.time
         && incoming().updatedAt == request.time
         && (isAdmin() || (uid == request.auth.uid && incoming().uid == request.auth.uid && incoming().isSample == false));
-      allow update: if isAllowedUser() && isValidId(uid)
+      allow update: if isInteractiveUser() && isValidId(uid)
         && isValidTeacherProfile(incoming())
         && incoming().uid == existing().uid
         && incoming().createdAt == existing().createdAt
@@ -480,12 +485,12 @@ service cloud.firestore {
     match /helloFeed/{postId} {
       allow get: if isAllowedUser() && isValidId(postId);
       allow list: if isAllowedUser();
-      allow create: if isAllowedUser() && isValidId(postId)
+      allow create: if isInteractiveUser() && isValidId(postId)
         && isValidHelloPost(incoming())
         && incoming().createdAt == request.time
         && (isAdmin() || (incoming().authorUid == request.auth.uid && incoming().isSample == false));
       allow update: if false;
-      allow delete: if isAllowedUser() && isValidId(postId)
+      allow delete: if isInteractiveUser() && isValidId(postId)
         && (isAdmin() || existing().authorUid == request.auth.uid);
     }
 
@@ -505,13 +510,13 @@ service cloud.firestore {
         allow get: if isAllowedUser() && isValidId(levelId) && isValidId(commentId)
           && exists(/databases/$(database)/documents/curriculumMaps/$(levelId));
         allow list: if isAllowedUser();
-        allow create: if isAllowedUser() && isValidId(levelId) && isValidId(commentId)
+        allow create: if isInteractiveUser() && isValidId(levelId) && isValidId(commentId)
           && isValidCurriculumComment(incoming())
           && incoming().createdAt == request.time
           && exists(/databases/$(database)/documents/curriculumMaps/$(levelId))
           && (isAdmin() || (incoming().authorUid == request.auth.uid && incoming().isSample == false));
         allow update: if false;
-        allow delete: if isAllowedUser() && isValidId(levelId) && isValidId(commentId)
+        allow delete: if isInteractiveUser() && isValidId(levelId) && isValidId(commentId)
           && exists(/databases/$(database)/documents/curriculumMaps/$(levelId))
           && (isAdmin() || existing().authorUid == request.auth.uid);
       }
@@ -536,7 +541,7 @@ service cloud.firestore {
         && (isAdmin() || existing().approved == true || existing().addedByUid == request.auth.uid);
       allow list: if isAdmin()
         || (isAllowedUser() && (resource.data.approved == true || resource.data.addedByUid == request.auth.uid));
-      allow create: if isAllowedUser() && isValidId(resourceId)
+      allow create: if isInteractiveUser() && isValidId(resourceId)
         && isValidResourceItem(incoming())
         && incoming().createdAt == request.time
         && incoming().updatedAt == request.time
@@ -552,7 +557,7 @@ service cloud.firestore {
             && incoming().thumbsDown == 0
           )
         );
-      allow update: if isAllowedUser() && isValidId(resourceId)
+      allow update: if isInteractiveUser() && isValidId(resourceId)
         && isValidResourceItem(incoming())
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
@@ -571,12 +576,12 @@ service cloud.firestore {
       allow get: if isAllowedUser() && isValidId(stateId)
         && (isAdmin() || existing().uid == request.auth.uid);
       allow list: if isAdmin() || (isAllowedUser() && resource.data.uid == request.auth.uid);
-      allow create: if isAllowedUser() && isValidId(stateId)
+      allow create: if isInteractiveUser() && isValidId(stateId)
         && isValidTeacherResourceState(incoming())
         && incoming().uid == request.auth.uid
         && stateId == request.auth.uid + '_' + incoming().resourceId
         && incoming().updatedAt == request.time;
-      allow update: if isAllowedUser() && isValidId(stateId)
+      allow update: if isInteractiveUser() && isValidId(stateId)
         && isValidTeacherResourceState(incoming())
         && incoming().uid == existing().uid
         && incoming().resourceId == existing().resourceId
@@ -590,7 +595,7 @@ service cloud.firestore {
             ])
           )
         );
-      allow delete: if isAllowedUser() && isValidId(stateId)
+      allow delete: if isInteractiveUser() && isValidId(stateId)
         && (isAdmin() || existing().uid == request.auth.uid);
     }
 
@@ -613,7 +618,7 @@ service cloud.firestore {
     match /trainingResponses/{responseId} {
       allow get: if isAllowedUser() && isValidId(responseId);
       allow list: if isAllowedUser();
-      allow create: if isAllowedUser() && isValidId(responseId)
+      allow create: if isInteractiveUser() && isValidId(responseId)
         && isValidTrainingResponse(incoming())
         && incoming().updatedAt == request.time
         && exists(/databases/$(database)/documents/trainingSessions/$(incoming().sessionId))
@@ -625,7 +630,7 @@ service cloud.firestore {
             && incoming().isSample == false
           )
         );
-      allow update: if isAllowedUser() && isValidId(responseId)
+      allow update: if isInteractiveUser() && isValidId(responseId)
         && isValidTrainingResponse(incoming())
         && incoming().sessionId == existing().sessionId
         && incoming().uid == existing().uid
@@ -650,7 +655,7 @@ service cloud.firestore {
         && isValidOneToOneSlot(incoming())
         && incoming().createdAt == request.time
         && incoming().updatedAt == request.time;
-      allow update: if isAllowedUser() && isValidId(slotId)
+      allow update: if isInteractiveUser() && isValidId(slotId)
         && isValidOneToOneSlot(incoming())
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
@@ -679,13 +684,13 @@ service cloud.firestore {
       allow get: if isValidId(obsId) && (
         isAdmin()
         || (
-          isAllowedUser()
+          isInteractiveUser()
           && (existing().teacherUid == request.auth.uid || existing().teacherEmailKey == myEmailKey())
         )
       );
       allow list: if isAdmin()
         || (
-          isAllowedUser()
+          isInteractiveUser()
           && (resource.data.teacherUid == request.auth.uid || resource.data.teacherEmailKey == myEmailKey())
         );
       allow create: if isAdmin() && isValidId(obsId)
@@ -699,7 +704,7 @@ service cloud.firestore {
         && (
           isAdmin()
           || (
-            isAllowedUser()
+            isInteractiveUser()
             && existing().status != 'completed'
             && (existing().teacherUid == request.auth.uid || existing().teacherEmailKey == myEmailKey())
             && incoming().diff(existing()).affectedKeys().hasOnly(['teacherReply', 'updatedAt'])
@@ -710,14 +715,14 @@ service cloud.firestore {
 
     // 13. Month 1 Needs Survey (Owner + Admins)
     match /needsSurveys/{uid} {
-      allow get: if isValidId(uid) && (isAdmin() || (isAllowedUser() && uid == request.auth.uid));
-      allow list: if isAdmin() || (isAllowedUser() && resource.data.uid == request.auth.uid);
-      allow create: if isAllowedUser() && isValidId(uid)
+      allow get: if isValidId(uid) && (isAdmin() || (isInteractiveUser() && uid == request.auth.uid));
+      allow list: if isAdmin() || (isInteractiveUser() && resource.data.uid == request.auth.uid);
+      allow create: if isInteractiveUser() && isValidId(uid)
         && isValidNeedsSurvey(incoming())
         && incoming().createdAt == request.time
         && incoming().updatedAt == request.time
         && (isAdmin() || (uid == request.auth.uid && incoming().uid == request.auth.uid && incoming().isSample == false));
-      allow update: if isAllowedUser() && isValidId(uid)
+      allow update: if isInteractiveUser() && isValidId(uid)
         && isValidNeedsSurvey(incoming())
         && incoming().uid == existing().uid
         && incoming().createdAt == existing().createdAt
@@ -734,28 +739,20 @@ service cloud.firestore {
       allow delete: if isAdmin() && isValidId(uid);
     }
 
-    // 14. Shared FAQ (Hard Student Questions)
+    // 14. Shared FAQ (Hard Student Questions — teachers can ask; ONLY admins can edit/answer/delete)
     match /faqs/{faqId} {
       allow get: if isAllowedUser() && isValidId(faqId);
       allow list: if isAllowedUser();
-      allow create: if isAllowedUser() && isValidId(faqId)
+      allow create: if isInteractiveUser() && isValidId(faqId)
         && isValidFaqItem(incoming())
         && incoming().createdAt == request.time
         && incoming().updatedAt == request.time
         && (isAdmin() || (incoming().askedByUid == request.auth.uid && incoming().isSample == false));
-      allow update: if isAllowedUser() && isValidId(faqId)
+      allow update: if isAdmin() && isValidId(faqId)
         && isValidFaqItem(incoming())
         && incoming().askedByUid == existing().askedByUid
         && incoming().createdAt == existing().createdAt
-        && incoming().updatedAt == request.time
-        && (
-          isAdmin()
-          || (
-            incoming().diff(existing()).affectedKeys().hasOnly([
-              'explanation', 'example', 'checkingQuestion', 'answeredBy', 'status', 'updatedAt'
-            ])
-          )
-        );
+        && incoming().updatedAt == request.time;
       allow delete: if isAdmin() && isValidId(faqId);
     }
 
@@ -763,7 +760,7 @@ service cloud.firestore {
     match /suggestions/{suggestionId} {
       allow get: if isAdmin() && isValidId(suggestionId);
       allow list: if isAdmin();
-      allow create: if isAllowedUser() && isValidId(suggestionId)
+      allow create: if isInteractiveUser() && isValidId(suggestionId)
         && isValidSuggestion(incoming())
         && incoming().createdAt == request.time
         && (isAdmin() || incoming().isSample == false);
@@ -775,12 +772,12 @@ service cloud.firestore {
     match /syllabusEntries/{entryId} {
       allow get: if isAllowedUser() && isValidId(entryId);
       allow list: if isAllowedUser();
-      allow create: if isAllowedUser() && isValidId(entryId)
+      allow create: if isInteractiveUser() && isValidId(entryId)
         && isValidSyllabusEntry(incoming())
         && incoming().createdAt == request.time
         && incoming().updatedAt == request.time
         && (isAdmin() || (incoming().teacherUid == request.auth.uid && incoming().isSample == false));
-      allow update: if isAllowedUser() && isValidId(entryId)
+      allow update: if isInteractiveUser() && isValidId(entryId)
         && isValidSyllabusEntry(incoming())
         && incoming().teacherUid == existing().teacherUid
         && incoming().createdAt == existing().createdAt
@@ -795,7 +792,7 @@ service cloud.firestore {
             ])
           )
         );
-      allow delete: if isAllowedUser() && isValidId(entryId)
+      allow delete: if isInteractiveUser() && isValidId(entryId)
         && (isAdmin() || existing().teacherUid == request.auth.uid);
     }
   }

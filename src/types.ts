@@ -1,6 +1,6 @@
 import type { Timestamp } from 'firebase/firestore';
 
-export type UserRole = 'admin' | 'teacher';
+export type UserRole = 'admin' | 'teacher' | 'viewer';
 
 export type NavTab =
   | 'home'

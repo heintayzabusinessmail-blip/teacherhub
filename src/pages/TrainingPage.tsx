@@ -38,7 +38,7 @@ import {
 import type { TrainingSession } from '../types';
 
 export function TrainingPage() {
-  const { user, isAdmin, myProfile, trainingSessions, trainingResponses } = useHub();
+  const { user, isAdmin, canInteract, myProfile, trainingSessions, trainingResponses } = useHub();
 
   const [monthFilter, setMonthFilter] = useState<number | 'all'>('all');
   const [feedbackOpenId, setFeedbackOpenId] = useState<string | null>(null);
@@ -85,7 +85,7 @@ export function TrainingPage() {
       reflection: string;
     }>
   ) => {
-    if (!user) return;
+    if (!user || !canInteract) return;
     const id = `${sessionId}_${user.uid}`;
     const existing = getMyResponse(sessionId);
     try {

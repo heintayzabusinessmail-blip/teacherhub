@@ -22,7 +22,13 @@ import {
   setDoc,
   updateDoc,
 } from 'firebase/firestore';
-import { db, emailToKey, handleFirestoreError, OperationType } from '../firebase';
+import {
+  BOOTSTRAPPED_ADMIN_EMAIL,
+  db,
+  emailToKey,
+  handleFirestoreError,
+  OperationType,
+} from '../firebase';
 import { useHub } from '../context/HubContext';
 import { ADMIN_TARGETS, PAGE_SUMMARIES } from '../content/planContent';
 import { PageHeader } from '../components/PageHeader';
@@ -36,6 +42,7 @@ type AdminSubTab = 'overview' | 'allowlist' | 'slots' | 'observations' | 'survey
 export function AdminPage() {
   const {
     user,
+    isPrimaryOwner,
     isAdmin,
     myProfile,
     allowlist,
@@ -58,7 +65,7 @@ export function AdminPage() {
   // Allowlist form
   const [newEmail, setNewEmail] = useState('');
   const [newName, setNewName] = useState('');
-  const [newRole, setNewRole] = useState<UserRole>('teacher');
+  const [newRole, setNewRole] = useState<UserRole>('admin');
   const [savingAllow, setSavingAllow] = useState(false);
 
   // 1-to-1 Slot form
@@ -161,7 +168,7 @@ export function AdminPage() {
       });
       setNewEmail('');
       setNewName('');
-      setNewRole('teacher');
+      setNewRole('admin');
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, 'allowlist');
     } finally {
@@ -169,10 +176,10 @@ export function AdminPage() {
     }
   };
 
-  const handleToggleRole = async (id: string, currentRole: UserRole) => {
+  const handleChangeRole = async (id: string, nextRole: UserRole) => {
     try {
       await updateDoc(doc(db, 'allowlist', id), {
-        role: currentRole === 'admin' ? 'teacher' : 'admin',
+        role: nextRole,
         updatedAt: serverTimestamp(),
       });
     } catch (err) {
@@ -545,48 +552,57 @@ export function AdminPage() {
           <div>
             <h2 className="text-lg font-bold text-[#1F122B] dark:text-[#F5EEF9] flex items-center gap-2">
               <UserPlus className="w-5 h-5 text-[#A8567F]" />
-              Email Allowlist & Roles
+              Email Allowlist & Edit Access
             </h2>
-            <p className="text-xs text-[#5A4A66] dark:text-[#BBAAC9]">
-              Only emails listed here can enter the hub. Anyone else sees “Ask Tr Hein to add your
-              email.”
+            <p className="text-xs text-[#5A4A66] dark:text-[#BBAAC9] mt-1">
+              Any Gmail account can sign in to view the hub in read-only mode (cannot edit
+              anything). Only your owner account ({BOOTSTRAPPED_ADMIN_EMAIL}) can edit by default.
+              Add an email below to grant edit or teacher access.
             </p>
           </div>
 
-          <form onSubmit={handleAddAllowlist} className="grid sm:grid-cols-12 gap-2.5">
-            <input
-              type="email"
-              required
-              maxLength={200}
-              value={newEmail}
-              onChange={(e) => setNewEmail(e.target.value)}
-              placeholder="teacher.email@gmail.com"
-              className="sm:col-span-5 min-h-[44px] px-3.5 py-2 rounded-xl border border-[#E5D9EC] dark:border-[#332442] bg-[#FAF7FC] dark:bg-[#140D1A] text-sm"
-            />
-            <input
-              type="text"
-              maxLength={120}
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              placeholder="Teacher name"
-              className="sm:col-span-3 min-h-[44px] px-3.5 py-2 rounded-xl border border-[#E5D9EC] dark:border-[#332442] bg-[#FAF7FC] dark:bg-[#140D1A] text-sm"
-            />
-            <select
-              value={newRole}
-              onChange={(e) => setNewRole(e.target.value as UserRole)}
-              className="sm:col-span-2 min-h-[44px] px-3 py-2 rounded-xl border border-[#E5D9EC] dark:border-[#332442] bg-[#FAF7FC] dark:bg-[#140D1A] text-sm"
-            >
-              <option value="teacher">Teacher</option>
-              <option value="admin">Admin</option>
-            </select>
-            <button
-              type="submit"
-              disabled={savingAllow}
-              className="sm:col-span-2 min-h-[44px] px-4 py-2 rounded-xl bg-[#3B1050] hover:bg-[#4E1869] text-white text-sm font-semibold"
-            >
-              {savingAllow ? 'Adding...' : 'Add'}
-            </button>
-          </form>
+          {isPrimaryOwner ? (
+            <form onSubmit={handleAddAllowlist} className="grid sm:grid-cols-12 gap-2.5">
+              <input
+                type="email"
+                required
+                maxLength={200}
+                value={newEmail}
+                onChange={(e) => setNewEmail(e.target.value)}
+                placeholder="person.email@gmail.com"
+                className="sm:col-span-4 min-h-[44px] px-3.5 py-2 rounded-xl border border-[#E5D9EC] dark:border-[#332442] bg-[#FAF7FC] dark:bg-[#140D1A] text-sm"
+              />
+              <input
+                type="text"
+                maxLength={120}
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder="Name (optional)"
+                className="sm:col-span-3 min-h-[44px] px-3.5 py-2 rounded-xl border border-[#E5D9EC] dark:border-[#332442] bg-[#FAF7FC] dark:bg-[#140D1A] text-sm"
+              />
+              <select
+                value={newRole}
+                onChange={(e) => setNewRole(e.target.value as UserRole)}
+                className="sm:col-span-3 min-h-[44px] px-3 py-2 rounded-xl border border-[#E5D9EC] dark:border-[#332442] bg-[#FAF7FC] dark:bg-[#140D1A] text-sm"
+              >
+                <option value="admin">Editor / Admin (can edit)</option>
+                <option value="teacher">Teacher (forms & profile)</option>
+                <option value="viewer">View Only (cannot edit)</option>
+              </select>
+              <button
+                type="submit"
+                disabled={savingAllow}
+                className="sm:col-span-2 min-h-[44px] px-4 py-2 rounded-xl bg-[#3B1050] hover:bg-[#4E1869] text-white text-sm font-semibold"
+              >
+                {savingAllow ? 'Adding...' : 'Add Email'}
+              </button>
+            </form>
+          ) : (
+            <div className="p-3.5 rounded-xl bg-[#FAF7FC] dark:bg-[#160F1F] border border-[#E5D9EC] dark:border-[#332442] text-xs text-[#5A4A66] dark:text-[#BBAAC9]">
+              Only Tr Hein ({BOOTSTRAPPED_ADMIN_EMAIL}) can add or remove emails and grant edit
+              access.
+            </div>
+          )}
 
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
@@ -594,38 +610,75 @@ export function AdminPage() {
                 <tr>
                   <th className="py-2.5 pr-4">Name</th>
                   <th className="py-2.5 pr-4">Email</th>
-                  <th className="py-2.5 pr-4">Role</th>
-                  <th className="py-2.5 text-right">Actions</th>
+                  <th className="py-2.5 pr-4">Access Level</th>
+                  {isPrimaryOwner && <th className="py-2.5 text-right">Actions</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#F0E6F5] dark:divide-[#2E203D]">
-                {allowlist.map((entry) => (
-                  <tr key={entry.id}>
-                    <td className="py-3 pr-4 font-medium">{entry.displayName}</td>
-                    <td className="py-3 pr-4 font-mono text-xs">{entry.email}</td>
-                    <td className="py-3 pr-4">
-                      <span className="text-xs font-semibold text-[#3B1050] dark:text-[#E2B8D0]">
-                        {entry.role === 'admin' ? 'Admin' : 'Teacher'}
-                      </span>
-                    </td>
-                    <td className="py-3 text-right space-x-3 whitespace-nowrap">
-                      <button
-                        type="button"
-                        onClick={() => handleToggleRole(entry.id, entry.role)}
-                        className="text-xs font-semibold text-[#3B1050] dark:text-[#E2B8D0] hover:underline"
-                      >
-                        Switch to {entry.role === 'admin' ? 'Teacher' : 'Admin'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteAllowlist(entry.id)}
-                        className="text-xs font-semibold text-red-600 dark:text-red-400 hover:underline"
-                      >
-                        Remove
-                      </button>
+                {allowlist.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={isPrimaryOwner ? 4 : 3}
+                      className="py-6 text-center text-xs text-[#5A4A66] dark:text-[#BBAAC9]"
+                    >
+                      No other emails added yet. Any Gmail account can view the hub (read-only),
+                      and only your owner account can currently edit.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  allowlist.map((entry) => {
+                    const isOwnerRow = entry.email.toLowerCase() === BOOTSTRAPPED_ADMIN_EMAIL;
+                    const roleLabel = isOwnerRow
+                      ? 'Owner · Full Edit'
+                      : entry.role === 'admin'
+                        ? 'Editor / Admin (Can Edit)'
+                        : entry.role === 'teacher'
+                          ? 'Teacher (Forms & Profile)'
+                          : 'View Only (Cannot Edit)';
+                    return (
+                      <tr key={entry.id}>
+                        <td className="py-3 pr-4 font-medium">{entry.displayName}</td>
+                        <td className="py-3 pr-4 font-mono text-xs">{entry.email}</td>
+                        <td className="py-3 pr-4">
+                          <span className="text-xs font-semibold text-[#3B1050] dark:text-[#E2B8D0]">
+                            {roleLabel}
+                          </span>
+                        </td>
+                        {isPrimaryOwner && (
+                          <td className="py-3 text-right whitespace-nowrap">
+                            {isOwnerRow ? (
+                              <span className="text-xs text-[#7A6888] dark:text-[#9D8AAD]">
+                                Protected Owner
+                              </span>
+                            ) : (
+                              <div className="inline-flex items-center gap-3">
+                                <select
+                                  aria-label={`Access level for ${entry.email}`}
+                                  value={entry.role}
+                                  onChange={(e) =>
+                                    handleChangeRole(entry.id, e.target.value as UserRole)
+                                  }
+                                  className="min-h-[36px] px-2.5 py-1 rounded-lg border border-[#E5D9EC] dark:border-[#332442] bg-[#FAF7FC] dark:bg-[#140D1A] text-xs font-medium"
+                                >
+                                  <option value="viewer">View Only</option>
+                                  <option value="teacher">Teacher</option>
+                                  <option value="admin">Editor / Admin</option>
+                                </select>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteAllowlist(entry.id)}
+                                  className="text-xs font-semibold text-red-600 dark:text-red-400 hover:underline"
+                                >
+                                  Remove
+                                </button>
+                              </div>
+                            )}
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>

@@ -49,7 +49,7 @@ interface AskHubReply {
 }
 
 export function ResourcesPage() {
-  const { user, isAdmin, myProfile, resources, myResourceStates, faqs } = useHub();
+  const { user, isAdmin, canInteract, myProfile, resources, myResourceStates, faqs } = useHub();
 
   const [scope, setScope] = useState<ViewScope>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -137,7 +137,7 @@ export function ResourcesPage() {
       markOpened: boolean;
     }>
   ) => {
-    if (!user) return;
+    if (!user || !canInteract) return;
     const stateId = `${user.uid}_${resourceId}`;
     const current = myResourceStates[resourceId];
     const now = serverTimestamp();
@@ -167,6 +167,7 @@ export function ResourcesPage() {
   };
 
   const handleOpenResource = async (r: ResourceItem) => {
+    if (!canInteract) return;
     await upsertState(r.id, { markOpened: true });
     try {
       await updateDoc(doc(db, 'resources', r.id), {
@@ -179,6 +180,7 @@ export function ResourcesPage() {
   };
 
   const handleToggleUsed = async (r: ResourceItem) => {
+    if (!canInteract) return;
     const nextUsed = !myResourceStates[r.id]?.used;
     await upsertState(r.id, { used: nextUsed });
     try {
@@ -192,6 +194,7 @@ export function ResourcesPage() {
   };
 
   const handleRate = async (r: ResourceItem, nextRating: 'up' | 'down') => {
+    if (!canInteract) return;
     const prevRating = myResourceStates[r.id]?.rating || '';
     const finalRating = prevRating === nextRating ? '' : nextRating;
     await upsertState(r.id, { rating: finalRating });

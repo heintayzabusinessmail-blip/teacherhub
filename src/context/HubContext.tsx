@@ -45,7 +45,10 @@ interface HubContextValue {
   setNeedsEmailLinkConfirm: (v: boolean) => void;
   isAllowed: boolean;
   role: UserRole;
+  isPrimaryOwner: boolean;
   isAdmin: boolean;
+  isViewer: boolean;
+  canInteract: boolean;
   myProfile: TeacherProfile | null;
   profileLoaded: boolean;
   syncError: Error | null;
@@ -81,7 +84,7 @@ export function HubProvider({ children }: { children: React.ReactNode }) {
   const [authLoading, setAuthLoading] = useState(true);
   const [needsEmailLinkConfirm, setNeedsEmailLinkConfirm] = useState(false);
   const [isAllowed, setIsAllowed] = useState(false);
-  const [role, setRole] = useState<UserRole>('teacher');
+  const [role, setRole] = useState<UserRole>('viewer');
   const [profileLoaded, setProfileLoaded] = useState(false);
   const [syncError, setSyncError] = useState<Error | null>(null);
 
@@ -153,7 +156,7 @@ export function HubProvider({ children }: { children: React.ReactNode }) {
       setUser(firebaseUser);
       if (!firebaseUser || !firebaseUser.email) {
         setIsAllowed(false);
-        setRole('teacher');
+        setRole('viewer');
         setProfileLoaded(false);
         setAuthLoading(false);
         return;
@@ -173,15 +176,22 @@ export function HubProvider({ children }: { children: React.ReactNode }) {
         if (allowSnap.exists()) {
           const data = allowSnap.data();
           setIsAllowed(true);
-          setRole(data.role === 'admin' ? 'admin' : 'teacher');
+          setRole(
+            data.role === 'admin'
+              ? 'admin'
+              : data.role === 'teacher'
+                ? 'teacher'
+                : 'viewer'
+          );
         } else {
-          setIsAllowed(false);
-          setRole('teacher');
+          // Any signed-in Gmail / email account can enter in strictly View-Only mode
+          setIsAllowed(true);
+          setRole('viewer');
         }
       } catch (err) {
         console.error('Allowlist check error:', err);
-        setIsAllowed(false);
-        setRole('teacher');
+        setIsAllowed(true);
+        setRole('viewer');
       } finally {
         setAuthLoading(false);
       }
@@ -189,7 +199,10 @@ export function HubProvider({ children }: { children: React.ReactNode }) {
     return () => unsub();
   }, []);
 
+  const isPrimaryOwner = user?.email?.toLowerCase() === BOOTSTRAPPED_ADMIN_EMAIL;
   const isAdmin = role === 'admin';
+  const isViewer = role === 'viewer';
+  const canInteract = role === 'admin' || role === 'teacher';
 
   // Live Firestore subscriptions (only when authenticated AND allowlisted!)
   useEffect(() => {
@@ -344,21 +357,25 @@ export function HubProvider({ children }: { children: React.ReactNode }) {
       );
     }
 
-    // 7. Personal resource states
-    unsubs.push(
-      onSnapshot(
-        query(collection(db, 'teacherResourceStates'), where('uid', '==', uid)),
-        (snap) => {
-          const map: Record<string, TeacherResourceState> = {};
-          snap.docs.forEach((d) => {
-            const item = { ...(d.data() as TeacherResourceState), id: d.id };
-            map[item.resourceId] = item;
-          });
-          setMyResourceStates(map);
-        },
-        (err) => reportSnapshotError(err, OperationType.LIST, 'teacherResourceStates/mine')
-      )
-    );
+    // 7. Personal resource states (interactive users only)
+    if (canInteract) {
+      unsubs.push(
+        onSnapshot(
+          query(collection(db, 'teacherResourceStates'), where('uid', '==', uid)),
+          (snap) => {
+            const map: Record<string, TeacherResourceState> = {};
+            snap.docs.forEach((d) => {
+              const item = { ...(d.data() as TeacherResourceState), id: d.id };
+              map[item.resourceId] = item;
+            });
+            setMyResourceStates(map);
+          },
+          (err) => reportSnapshotError(err, OperationType.LIST, 'teacherResourceStates/mine')
+        )
+      );
+    } else {
+      setMyResourceStates({});
+    }
 
     // 8. Training Sessions & Responses
     unsubs.push(
@@ -397,7 +414,7 @@ export function HubProvider({ children }: { children: React.ReactNode }) {
       )
     );
 
-    // 10. Private Observations (Admin sees all; teacher sees ONLY own)
+    // 10. Private Observations (Admin sees all; allowlisted teacher sees ONLY own; viewers see none)
     if (isAdmin) {
       unsubs.push(
         onSnapshot(
@@ -410,7 +427,7 @@ export function HubProvider({ children }: { children: React.ReactNode }) {
           (err) => reportSnapshotError(err, OperationType.LIST, 'observations')
         )
       );
-    } else {
+    } else if (canInteract) {
       let byUid: ObservationDoc[] = [];
       let byEmail: ObservationDoc[] = [];
       const mergeObs = () => {
@@ -441,18 +458,24 @@ export function HubProvider({ children }: { children: React.ReactNode }) {
           (err) => reportSnapshotError(err, OperationType.LIST, 'observations/byEmail')
         )
       );
+    } else {
+      setObservations([]);
     }
 
-    // 11. Own Needs Survey
-    unsubs.push(
-      onSnapshot(
-        doc(db, 'needsSurveys', uid),
-        (snap) => {
-          setMySurvey(snap.exists() ? ({ ...(snap.data() as NeedsSurveyDoc), uid: snap.id }) : null);
-        },
-        (err) => reportSnapshotError(err, OperationType.GET, `needsSurveys/${uid}`)
-      )
-    );
+    // 11. Own Needs Survey (interactive users only)
+    if (canInteract) {
+      unsubs.push(
+        onSnapshot(
+          doc(db, 'needsSurveys', uid),
+          (snap) => {
+            setMySurvey(snap.exists() ? ({ ...(snap.data() as NeedsSurveyDoc), uid: snap.id }) : null);
+          },
+          (err) => reportSnapshotError(err, OperationType.GET, `needsSurveys/${uid}`)
+        )
+      );
+    } else {
+      setMySurvey(null);
+    }
 
     // 12. Shared FAQs
     unsubs.push(
@@ -529,7 +552,7 @@ export function HubProvider({ children }: { children: React.ReactNode }) {
     return () => {
       unsubs.forEach((u) => u());
     };
-  }, [user, isAllowed, isAdmin]);
+  }, [user, isAllowed, isAdmin, canInteract]);
 
   const myProfile = useMemo(() => {
     if (!user) return null;
@@ -554,7 +577,10 @@ export function HubProvider({ children }: { children: React.ReactNode }) {
     setNeedsEmailLinkConfirm,
     isAllowed,
     role,
+    isPrimaryOwner,
     isAdmin,
+    isViewer,
+    canInteract,
     myProfile,
     profileLoaded,
     syncError,

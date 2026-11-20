@@ -6,7 +6,7 @@
       "type": "object",
       "properties": {
         "email": { "type": "string", "maxLength": 200 },
-        "role": { "type": "string", "enum": ["admin", "teacher"] },
+        "role": { "type": "string", "enum": ["admin", "teacher", "viewer"] },
         "displayName": { "type": "string", "maxLength": 120 },
         "addedBy": { "type": "string", "maxLength": 128 },
         "isSample": { "type": "boolean" },

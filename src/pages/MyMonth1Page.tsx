@@ -29,7 +29,7 @@ interface MyMonth1PageProps {
 }
 
 export function MyMonth1Page({ onNavigate }: MyMonth1PageProps) {
-  const { user, myProfile, oneToOneSlots, observations, mySurvey, trainingResponses } = useHub();
+  const { user, canInteract, myProfile, oneToOneSlots, observations, mySurvey, trainingResponses } = useHub();
 
   const [bookingNotes, setBookingNotes] = useState('');
   const [busySlotId, setBusySlotId] = useState<string | null>(null);
@@ -102,7 +102,7 @@ export function MyMonth1Page({ onNavigate }: MyMonth1PageProps) {
   const completedCount = checklistItems.filter((c) => c.done).length;
 
   const toggleChecklistFlag = async (key: keyof NonNullable<typeof myProfile>['checklist']) => {
-    if (!user || !myProfile) return;
+    if (!user || !myProfile || !canInteract) return;
     try {
       await updateDoc(doc(db, 'teachers', user.uid), {
         checklist: {
@@ -117,7 +117,7 @@ export function MyMonth1Page({ onNavigate }: MyMonth1PageProps) {
   };
 
   const handleBookSlot = async (slotId: string) => {
-    if (!user || !myProfile) return;
+    if (!user || !myProfile || !canInteract) return;
     setBusySlotId(slotId);
     try {
       await updateDoc(doc(db, 'oneToOneSlots', slotId), {
@@ -139,7 +139,7 @@ export function MyMonth1Page({ onNavigate }: MyMonth1PageProps) {
   };
 
   const handleCancelSlot = async (slotId: string) => {
-    if (!user || !myProfile) return;
+    if (!user || !myProfile || !canInteract) return;
     setBusySlotId(slotId);
     try {
       await updateDoc(doc(db, 'oneToOneSlots', slotId), {
@@ -161,7 +161,7 @@ export function MyMonth1Page({ onNavigate }: MyMonth1PageProps) {
 
   const handleSaveObservationReply = async (obs: ObservationDoc) => {
     const replyText = (replyDrafts[obs.id] ?? obs.teacherReply ?? '').trim();
-    if (!replyText) return;
+    if (!replyText || !canInteract) return;
     setSavingReplyId(obs.id);
     try {
       await updateDoc(doc(db, 'observations', obs.id), {

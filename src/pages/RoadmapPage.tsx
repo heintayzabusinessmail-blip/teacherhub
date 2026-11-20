@@ -61,7 +61,7 @@ const STATUS_META: Record<
 };
 
 export function RoadmapPage() {
-  const { user, myProfile, isAdmin, curriculumMaps, syllabusEntries } = useHub();
+  const { user, myProfile, isAdmin, canInteract, curriculumMaps, syllabusEntries } = useHub();
   const [selectedMonth, setSelectedMonth] = useState<number>(1);
   const [activeLevelId, setActiveLevelId] = useState<string>('');
   const [comments, setComments] = useState<CurriculumComment[]>([]);
@@ -216,7 +216,7 @@ export function RoadmapPage() {
 
   const handlePostComment = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!activeMap || !user || !commentInput.trim()) return;
+    if (!activeMap || !user || !canInteract || !commentInput.trim()) return;
     setPostingComment(true);
     try {
       await addDoc(collection(db, 'curriculumMaps', activeMap.id, 'comments'), {
@@ -260,7 +260,7 @@ export function RoadmapPage() {
 
   const handleSaveTrackerEntry = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !trClassName.trim() || !trPlannedUnit.trim() || !trWeekLabel.trim()) return;
+    if (!user || !canInteract || !trClassName.trim() || !trPlannedUnit.trim() || !trWeekLabel.trim()) return;
     setSavingEntry(true);
     const actorName = (myProfile?.displayName || user.displayName || 'Teacher').slice(0, 120);
     try {
@@ -304,7 +304,7 @@ export function RoadmapPage() {
   };
 
   const handleToggleUnitCompleted = async (entry: SyllabusEntry) => {
-    if (!user) return;
+    if (!user || !canInteract) return;
     setBusyEntryId(entry.id);
     const actorName = (myProfile?.displayName || user.displayName || 'Teacher').slice(0, 120);
     const nextCompleted = entry.status !== 'completed';

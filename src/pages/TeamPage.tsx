@@ -19,7 +19,7 @@ import { compressImageFileToDataUrl, getInitials } from '../utils/helpers';
 const LEVEL_OPTIONS = ['Pre-A1 / A1', 'A2', 'B1', 'B2', 'C1', 'One-to-One', 'Business English', 'Young Learners'];
 
 export function TeamPage() {
-  const { user, isAdmin, myProfile, teachers, hubConfig, helloFeed } = useHub();
+  const { user, isAdmin, canInteract, myProfile, teachers, hubConfig, helloFeed } = useHub();
 
   const [levelFilter, setLevelFilter] = useState('All');
   const [editingMyCard, setEditingMyCard] = useState(false);
@@ -101,7 +101,7 @@ export function TeamPage() {
 
   const handleSaveMyCard = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !myProfile) return;
+    if (!user || !myProfile || !canInteract) return;
     setSavingProfile(true);
     try {
       await updateDoc(doc(db, 'teachers', user.uid), {
@@ -129,7 +129,7 @@ export function TeamPage() {
 
   const handleSendHello = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !helloTarget || !helloText.trim()) return;
+    if (!user || !canInteract || !helloTarget || !helloText.trim()) return;
     setSendingHello(true);
     try {
       await addDoc(collection(db, 'helloFeed'), {
@@ -154,7 +154,7 @@ export function TeamPage() {
 
   const handlePostIcebreaker = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !iceAnswer.trim()) return;
+    if (!user || !canInteract || !iceAnswer.trim()) return;
     setSendingIce(true);
     try {
       await addDoc(collection(db, 'helloFeed'), {
