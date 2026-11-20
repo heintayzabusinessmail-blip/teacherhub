@@ -169,11 +169,11 @@ export const COORDINATOR_PROFILE = {
       photos: [] as Array<{ src: string; title: string; caption: string }>,
     },
     {
-      role: 'Lead English Language Teacher — Hysan Education',
+      role: 'Center Lead Manager — Hysan Education',
       period: 'Dec 2022 – Feb 2024',
       location: 'Myanmar',
       summary:
-        'Taught 12 consecutive batches, ran monthly teacher coaching sessions, led oral tests and student consultations, and created educational content for the Hysan Facebook page and YouTube channel.',
+        'Managed teachers and day-to-day center operations, taught 12 consecutive batches, ran monthly teacher coaching sessions, led oral tests and student consultations, and created educational content for the Hysan Facebook page and YouTube channel.',
       photos: [
         {
           src: '/assets/portfolio/hysan-christmas-event.jpg',

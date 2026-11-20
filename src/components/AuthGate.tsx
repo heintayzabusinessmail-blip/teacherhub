@@ -34,6 +34,11 @@ export function AuthGate() {
       const msg = err instanceof Error ? err.message : 'Sign-in could not finish.';
       if (msg.includes('popup-closed-by-user')) {
         setErrorMsg('Sign-in popup was closed. Please try again.');
+      } else if (msg.includes('unauthorized-domain')) {
+        const host = typeof window !== 'undefined' ? window.location.hostname : 'this domain';
+        setErrorMsg(
+          `This website domain (${host}) is not authorized in Firebase yet. In Firebase Console → Authentication → Settings → Authorized domains, click "Add domain" and add: ${host}`
+        );
       } else {
         setErrorMsg(msg);
       }
