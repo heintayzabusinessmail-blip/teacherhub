@@ -86,7 +86,7 @@ function HubRouter() {
       {activeTab === 'plan' && <PlanPage />}
       {activeTab === 'roadmap' && <RoadmapPage />}
       {activeTab === 'team' && <TeamPage />}
-      {activeTab === 'resources' && <ResourcesPage onNavigate={setActiveTab} />}
+      {activeTab === 'resources' && <ResourcesPage />}
       {activeTab === 'training' && <TrainingPage />}
       {activeTab === 'my-month-1' && <MyMonth1Page onNavigate={setActiveTab} />}
       {activeTab === 'voice' && <VoicePage />}

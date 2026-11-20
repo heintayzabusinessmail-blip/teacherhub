@@ -31,10 +31,9 @@ import { BOOTSTRAPPED_ADMIN_EMAIL, db, handleFirestoreError, OperationType } fro
 import { useHub } from '../context/HubContext';
 import { PAGE_SUMMARIES } from '../content/planContent';
 import { PageHeader } from '../components/PageHeader';
-import { ResourceAssistants } from '../components/ResourceAssistants';
 import { getEmbedPreviewUrl, parseResourcesCsv } from '../utils/helpers';
 import { notifyAdminOfTeacherAction } from '../utils/notifications';
-import type { NavTab, ResourceItem } from '../types';
+import type { ResourceItem } from '../types';
 
 const LEVELS = ['All', 'Pre-A1 / A1', 'A2', 'B1', 'B2', 'C1', 'All Levels', 'One-to-One'];
 const SKILLS = ['All', 'Speaking', 'Listening', 'Reading', 'Writing', 'Grammar', 'Vocabulary', 'Pronunciation', 'Assessment', 'Lesson Planning', 'Onboarding'];
@@ -42,11 +41,7 @@ const TYPES = ['All', 'Coursebook', 'Syllabus', 'Template', 'Slides', 'Audio', '
 
 type ViewScope = 'all' | 'bookmarks' | 'recent' | 'notes';
 
-interface ResourcesPageProps {
-  onNavigate?: (tab: NavTab) => void;
-}
-
-export function ResourcesPage({ onNavigate }: ResourcesPageProps) {
+export function ResourcesPage() {
   const {
     user,
     isAdmin,
@@ -54,7 +49,6 @@ export function ResourcesPage({ onNavigate }: ResourcesPageProps) {
     myProfile,
     resources,
     myResourceStates,
-    faqs,
     queueEmailConfirmation,
   } = useHub();
 
@@ -398,15 +392,6 @@ export function ResourcesPage({ onNavigate }: ResourcesPageProps) {
             )}
           </div>
         }
-      />
-
-      {/* Ask the Hub (Problem -> Right Document) & Ask Assistant Coordinator (TKT · TESOL · CELTA) */}
-      <ResourceAssistants
-        approvedResources={approvedResources}
-        faqs={faqs}
-        teacherName={myProfile?.displayName || user?.displayName || 'Teacher'}
-        onOpenResource={handleOpenResource}
-        onNavigate={onNavigate}
       />
 
       {/* Pending Teacher Suggestions Banner (Admin approves; teachers see own pending) */}

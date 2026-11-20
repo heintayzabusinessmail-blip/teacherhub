@@ -24,8 +24,9 @@ export const WORKSPACE_SCOPES = [
   'https://www.googleapis.com/auth/gmail.send',
 ];
 
+// Default sign-in uses standard Google login ONLY (no restricted Gmail scope)
+// so any teacher or viewer can sign in without hitting Google's restricted-scope verification block.
 export const googleProvider = new GoogleAuthProvider();
-WORKSPACE_SCOPES.forEach((scope) => googleProvider.addScope(scope));
 googleProvider.setCustomParameters({ prompt: 'select_account' });
 
 // In-memory cache ONLY for Google Workspace OAuth access token (never stored in localStorage/sessionStorage)

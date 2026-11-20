@@ -203,10 +203,20 @@ export function EmailConfirmModal({ draft, onClose, onSent }: EmailConfirmModalP
                   type="button"
                   onClick={onClose}
                   disabled={sending}
-                  className="min-h-[40px] px-4 py-2 rounded-xl border border-[#E5D9EC] dark:border-[#332442] text-xs font-medium text-[#5A4A66] dark:text-[#C5B4D4]"
+                  className="min-h-[40px] px-3.5 py-2 rounded-xl border border-[#E5D9EC] dark:border-[#332442] text-xs font-medium text-[#5A4A66] dark:text-[#C5B4D4]"
                 >
-                  Skip email
+                  Skip
                 </button>
+                {draft.recipients.length > 0 && (
+                  <a
+                    href={`mailto:${encodeURIComponent(draft.recipients.join(','))}?subject=${encodeURIComponent(draft.subject)}&body=${encodeURIComponent(draft.bodyText)}`}
+                    onClick={onClose}
+                    className="min-h-[40px] inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-[#A8567F]/50 text-xs font-semibold text-[#3B1050] dark:text-[#E8D5F5] hover:bg-[#FAF7FC] dark:hover:bg-[#2A1D38]"
+                  >
+                    <Mail className="w-3.5 h-3.5 text-[#A8567F]" />
+                    Open in Email App
+                  </a>
+                )}
                 <button
                   type="button"
                   onClick={handleConfirmAndSend}
@@ -218,7 +228,7 @@ export function EmailConfirmModal({ draft, onClose, onSent }: EmailConfirmModalP
                     ? 'Sending email...'
                     : hasToken
                       ? `Confirm & Send (${draft.recipients.length})`
-                      : 'Connect Gmail & Send'}
+                      : 'Send via Gmail'}
                 </button>
               </>
             )}
