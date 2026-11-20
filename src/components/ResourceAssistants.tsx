@@ -2,6 +2,8 @@ import React, { useMemo, useRef, useState } from 'react';
 import {
   ArrowRight,
   BookOpen,
+  Check,
+  Copy,
   ExternalLink,
   FileText,
   GraduationCap,
@@ -51,7 +53,8 @@ interface PracticeWay {
 interface CoordinatorReplyPayload {
   funnyReaction: string;
   frameworkTag: string;
-  pedagogyPrinciple: string;
+  directAnswer?: string;
+  pedagogyPrinciple?: string;
   practiceWays: PracticeWay[];
   questionBack: string;
   quickReplies: string[];
@@ -80,20 +83,22 @@ const HUB_STARTER_PROBLEMS = [
 ];
 
 const COACH_STARTER_PROMPTS = [
-  'Students nod "yes" when I ask "Do you understand?" and then freeze on the task',
-  'My B1 Zoom breakout rooms turn into awkward silence',
-  'I talk too much (high TTT) when explaining Present Perfect vs Past Simple',
-  'How do I correct speaking mistakes without killing student confidence?',
+  'Build me a 60-min B1 lesson plan on Present Perfect vs Past Simple with CCQs & games',
+  'Create a 5-question reading & speaking warmer for shy A2 teens on Zoom',
+  'Explain how to grade IELTS Task 2 essays quickly with a simple rubric',
+  'My students nod "yes" to "Do you understand?" then freeze — help!',
 ];
 
 const FRAMEWORKS = [
-  'All (TKT · TESOL · CELTA)',
+  'All Teaching (ChatGPT + TKT · TESOL · CELTA)',
+  'Lesson Plans & Materials',
   'CELTA Practice',
   'Cambridge TKT',
-  'TESOL Classroom',
+  'TESOL & Online Zoom',
+  'IELTS & Exam Prep',
 ];
 
-const COACH_LEVELS = ['Any level', 'Pre-A1 / A1', 'A2', 'B1', 'B2', 'C1', 'One-to-One'];
+const COACH_LEVELS = ['Any level', 'Pre-A1 / A1', 'A2', 'B1', 'B2', 'C1', 'IELTS / Exam', 'One-to-One'];
 
 export function ResourceAssistants({
   approvedResources,
@@ -118,6 +123,7 @@ export function ResourceAssistants({
   const [coachLoading, setCoachLoading] = useState(false);
   const [coachError, setCoachError] = useState('');
   const [coachMessages, setCoachMessages] = useState<CoachMessage[]>([]);
+  const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
   const coachBottomRef = useRef<HTMLDivElement | null>(null);
 
   // Build unified catalog of ALL YAO Hub documents for Ask the Hub
@@ -233,14 +239,24 @@ export function ResourceAssistants({
           documents: hubDocuments,
         }),
       });
-      const data = await res.json();
+      const rawText = await res.text();
+      let data: Partial<AskHubResponse> & { error?: string } = {};
+      try {
+        data = JSON.parse(rawText);
+      } catch {
+        data = {};
+      }
       if (!res.ok) {
-        setHubError(data.error || 'Ask the Hub could not answer right now.');
-      } else {
+        setHubError(
+          data.error || `Ask the Hub returned an error (${res.status}). Please try again.`
+        );
+      } else if (typeof data.summary === 'string') {
         setHubReply(data as AskHubResponse);
+      } else {
+        setHubError('Received an unexpected response from Ask the Hub. Please try again.');
       }
     } catch {
-      setHubError('Could not connect to Ask the Hub. You can still search the library below.');
+      setHubError('Could not connect to Ask the Hub right now. Please try again.');
     } finally {
       setHubLoading(false);
     }
@@ -267,7 +283,7 @@ export function ResourceAssistants({
         m.role === 'teacher'
           ? m.text || ''
           : m.reply
-            ? `${m.reply.funnyReaction} [${m.reply.frameworkTag}] ${m.reply.pedagogyPrinciple} Question asked back: ${m.reply.questionBack}`
+            ? `${m.reply.funnyReaction}\n${m.reply.directAnswer || m.reply.pedagogyPrinciple || ''}\nQuestion asked back: ${m.reply.questionBack}`
             : '',
     }));
 
@@ -288,10 +304,19 @@ export function ResourceAssistants({
           history: historyPayload,
         }),
       });
-      const data = await res.json();
+      const rawText = await res.text();
+      let data: Partial<CoordinatorReplyPayload> & { error?: string } = {};
+      try {
+        data = JSON.parse(rawText);
+      } catch {
+        data = {};
+      }
       if (!res.ok) {
-        setCoachError(data.error || 'Assistant Coordinator could not respond right now.');
-      } else {
+        setCoachError(
+          data.error ||
+            `Assistant Coordinator returned an error (${res.status}). Please try again.`
+        );
+      } else if (typeof data.funnyReaction === 'string') {
         const replyMsg: CoachMessage = {
           id: `c-${Date.now()}`,
           role: 'coordinator',
@@ -301,6 +326,10 @@ export function ResourceAssistants({
         setTimeout(() => {
           coachBottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }, 80);
+      } else {
+        setCoachError(
+          'Received an unexpected response from Assistant Coordinator. Please try again.'
+        );
       }
     } catch {
       setCoachError('Could not connect to Assistant Coordinator right now. Please try again.');
@@ -387,7 +416,7 @@ export function ResourceAssistants({
                   : 'text-[#5A4A66] dark:text-[#BBAAC9]'
               }`}
             >
-              TKT · TESOL · CELTA coach · witty replies &amp; real examples
+              Ask anything about teaching · lesson plans, TKT · TESOL · CELTA &amp; examples
             </p>
           </div>
         </button>
@@ -594,12 +623,13 @@ export function ResourceAssistants({
           <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
             <div className="space-y-1">
               <p className="text-xs font-semibold text-[#A8567F] dark:text-[#D98EB3]">
-                Teaching Practice Store · Cambridge TKT · TESOL · CELTA
+                All-Purpose Teaching Assistant · TKT · TESOL · CELTA · Lesson Plans · Quizzes · Feedback
               </p>
               <p className="text-xs text-[#5A4A66] dark:text-[#BBAAC9]">
-                Ask any real classroom question — your Assistant Coordinator flips the talking
-                ratio in Tr Hein’s witty style, gives you real classroom practice ways with worked
-                examples, and tosses a simple coaching question right back so we solve it together.
+                Ask anything related to teaching — lesson plans, worksheets, grammar explanations,
+                IELTS rubrics, Zoom games, classroom management, or TKT/TESOL/CELTA coaching. Your
+                Assistant Coordinator replies in Tr Hein’s witty style with ready-to-use examples
+                and tosses a quick follow-up question right back.
               </p>
             </div>
             {coachMessages.length > 0 && (
@@ -699,15 +729,55 @@ export function ResourceAssistants({
                     key={msg.id}
                     className="rounded-2xl rounded-bl-sm bg-[#FAF7FC] dark:bg-[#160F1F] border border-[#E5D9EC] dark:border-[#332442] p-4 space-y-3.5"
                   >
-                    {/* Header & Framework Tag */}
+                    {/* Header & Framework Tag + Copy */}
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <span className="text-xs font-bold text-[#3B1050] dark:text-[#E8D5F5] inline-flex items-center gap-1.5">
                         <GraduationCap className="w-4 h-4 text-[#A8567F]" />
                         Assistant Coordinator
                       </span>
-                      <span className="text-[11px] font-semibold text-[#A8567F] dark:text-[#D98EB3]">
-                        {r.frameworkTag}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] font-semibold text-[#A8567F] dark:text-[#D98EB3]">
+                          {r.frameworkTag}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const fullCopy = [
+                              r.funnyReaction,
+                              '',
+                              r.directAnswer || r.pedagogyPrinciple || '',
+                              ...(r.practiceWays.length > 0
+                                ? [
+                                    '',
+                                    'Real classroom practice & examples:',
+                                    ...r.practiceWays.map(
+                                      (pw, i) =>
+                                        `${i + 1}. ${pw.title}\n${pw.howToDoIt}\nExample: ${pw.realExample}`
+                                    ),
+                                  ]
+                                : []),
+                            ]
+                              .join('\n')
+                              .trim();
+                            navigator.clipboard?.writeText(fullCopy);
+                            setCopiedMsgId(msg.id);
+                            setTimeout(() => setCopiedMsgId(null), 1800);
+                          }}
+                          className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-[#E5D9EC] dark:border-[#332442] bg-white dark:bg-[#1F1629] text-[11px] font-medium text-[#5A4A66] dark:text-[#C5B4D4] hover:border-[#A8567F]"
+                        >
+                          {copiedMsgId === msg.id ? (
+                            <>
+                              <Check className="w-3 h-3 text-emerald-600" />
+                              Copied
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-3 h-3" />
+                              Copy
+                            </>
+                          )}
+                        </button>
+                      </div>
                     </div>
 
                     {/* Funny Tr-Hein Opener */}
@@ -715,13 +785,12 @@ export function ResourceAssistants({
                       {r.funnyReaction}
                     </p>
 
-                    {/* Core TKT / TESOL / CELTA Principle */}
-                    <div className="rounded-xl bg-white dark:bg-[#1F1629] border border-[#E5D9EC] dark:border-[#332442] px-3.5 py-2.5 text-xs text-[#5A4A66] dark:text-[#C5B4D4] leading-relaxed">
-                      <strong className="text-[#3B1050] dark:text-[#E8D5F5]">
-                        Why this works:{' '}
-                      </strong>
-                      {r.pedagogyPrinciple}
-                    </div>
+                    {/* Complete ChatGPT-style Teaching Answer */}
+                    {(r.directAnswer || r.pedagogyPrinciple) && (
+                      <div className="rounded-xl bg-white dark:bg-[#1F1629] border border-[#E5D9EC] dark:border-[#332442] px-4 py-3 text-xs sm:text-sm text-[#1F122B] dark:text-[#ECE0F5] leading-relaxed whitespace-pre-line">
+                        {r.directAnswer || r.pedagogyPrinciple}
+                      </div>
+                    )}
 
                     {/* Real Practice Ways + Worked Examples */}
                     {r.practiceWays.length > 0 && (
@@ -801,13 +870,13 @@ export function ResourceAssistants({
           <form onSubmit={handleCoachSubmit} className="flex flex-col sm:flex-row gap-2">
             <input
               type="text"
-              maxLength={700}
+              maxLength={1800}
               value={coachInput}
               onChange={(e) => setCoachInput(e.target.value)}
               placeholder={
                 coachMessages.length > 0
-                  ? 'Answer the question back or ask a follow-up...'
-                  : 'Ask any TKT / TESOL / CELTA teaching practice question...'
+                  ? 'Reply back, ask for changes, or ask your next teaching question...'
+                  : 'Ask anything about teaching (lesson plans, grammar, quizzes, IELTS, Zoom games, TKT/TESOL/CELTA)...'
               }
               className="flex-1 min-h-[44px] px-4 py-2 rounded-xl border border-[#E5D9EC] dark:border-[#332442] bg-[#FAF7FC] dark:bg-[#140D1A] text-sm"
             />
@@ -820,8 +889,8 @@ export function ResourceAssistants({
               {coachLoading
                 ? 'Thinking...'
                 : coachMessages.length > 0
-                  ? 'Reply back'
-                  : 'Ask Coach'}
+                  ? 'Send reply'
+                  : 'Ask Assistant'}
             </button>
           </form>
         </div>

@@ -12,7 +12,13 @@ import {
   Send,
 } from 'lucide-react';
 import { doc, serverTimestamp, updateDoc } from 'firebase/firestore';
-import { db, emailToKey, handleFirestoreError, OperationType } from '../firebase';
+import {
+  BOOTSTRAPPED_ADMIN_EMAIL,
+  db,
+  emailToKey,
+  handleFirestoreError,
+  OperationType,
+} from '../firebase';
 import { useHub } from '../context/HubContext';
 import { PAGE_SUMMARIES } from '../content/planContent';
 import { PageHeader } from '../components/PageHeader';
@@ -30,7 +36,16 @@ interface MyMonth1PageProps {
 }
 
 export function MyMonth1Page({ onNavigate }: MyMonth1PageProps) {
-  const { user, canInteract, myProfile, oneToOneSlots, observations, mySurvey, trainingResponses } = useHub();
+  const {
+    user,
+    canInteract,
+    myProfile,
+    oneToOneSlots,
+    observations,
+    mySurvey,
+    trainingResponses,
+    queueEmailConfirmation,
+  } = useHub();
 
   const [bookingNotes, setBookingNotes] = useState('');
   const [busySlotId, setBusySlotId] = useState<string | null>(null);
@@ -134,15 +149,26 @@ export function MyMonth1Page({ onNavigate }: MyMonth1PageProps) {
         updatedAt: serverTimestamp(),
       });
       const whenLabel = slot ? formatLocalDateTime(slot.dateTimeIso) : 'a 1-to-1 slot';
+      const bookTitle = `${myProfile.displayName} booked a 1-to-1 meeting`;
+      const bookMsg = `${slot?.label || '1-to-1 Chat'} on ${whenLabel}${trimmedNotes ? `\nNote: "${trimmedNotes}"` : ''}`;
       await notifyAdminOfTeacherAction({
         actorUid: user.uid,
         actorName: myProfile.displayName,
         category: 'meeting_booked',
-        title: `${myProfile.displayName} booked a 1-to-1 meeting`,
-        message: `${slot?.label || '1-to-1 Chat'} on ${whenLabel}${trimmedNotes ? ` · Note: "${trimmedNotes}"` : ''}`,
+        title: bookTitle,
+        message: bookMsg.slice(0, 600),
         targetTab: 'admin',
         priority: 'important',
       });
+      if (user.email?.toLowerCase() !== BOOTSTRAPPED_ADMIN_EMAIL) {
+        queueEmailConfirmation({
+          heading: 'Send 1-to-1 booking email to Tr Hein',
+          recipients: [BOOTSTRAPPED_ADMIN_EMAIL],
+          subject: `[YAO Hub] ${bookTitle} (${whenLabel})`,
+          bodyText: `${bookTitle}\n\nSession: ${bookMsg}\n\nView all bookings in Admin Dashboard.`,
+          senderLabel: `Booked by ${myProfile.displayName}`,
+        });
+      }
       setBookingNotes('');
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `oneToOneSlots/${slotId}`);
@@ -167,15 +193,26 @@ export function MyMonth1Page({ onNavigate }: MyMonth1PageProps) {
         updatedAt: serverTimestamp(),
       });
       const whenLabel = slot ? formatLocalDateTime(slot.dateTimeIso) : 'their 1-to-1 slot';
+      const cancelTitle = `${myProfile.displayName} cancelled a 1-to-1 booking`;
+      const cancelMsg = `Freed up ${slot?.label || '1-to-1 slot'} on ${whenLabel}.`;
       await notifyAdminOfTeacherAction({
         actorUid: user.uid,
         actorName: myProfile.displayName,
         category: 'meeting_cancelled',
-        title: `${myProfile.displayName} cancelled a 1-to-1 booking`,
-        message: `Freed up ${slot?.label || '1-to-1 slot'} on ${whenLabel}.`,
+        title: cancelTitle,
+        message: cancelMsg,
         targetTab: 'admin',
         priority: 'normal',
       });
+      if (user.email?.toLowerCase() !== BOOTSTRAPPED_ADMIN_EMAIL) {
+        queueEmailConfirmation({
+          heading: 'Email booking cancellation to Tr Hein',
+          recipients: [BOOTSTRAPPED_ADMIN_EMAIL],
+          subject: `[YAO Hub] ${cancelTitle}`,
+          bodyText: `${cancelTitle}\n\n${cancelMsg}`,
+          senderLabel: `Sent by ${myProfile.displayName}`,
+        });
+      }
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `oneToOneSlots/${slotId}`);
     } finally {

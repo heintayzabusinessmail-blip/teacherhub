@@ -24,6 +24,7 @@ import { useHub } from '../context/HubContext';
 import type { NavTab } from '../types';
 import { getInitials } from '../utils/helpers';
 import { NotificationBar } from './NotificationBar';
+import { EmailConfirmModal } from './EmailConfirmModal';
 
 interface AppShellProps {
   activeTab: NavTab;
@@ -56,7 +57,17 @@ const ALL_NAV_ITEMS: NavItemDef[] = [
 const MOBILE_PRIMARY_TABS: NavTab[] = ['home', 'plan', 'resources', 'my-month-1'];
 
 export function AppShell({ activeTab, onSelectTab, children }: AppShellProps) {
-  const { myProfile, user, isPrimaryOwner, isAdmin, isViewer, darkMode, toggleDarkMode } = useHub();
+  const {
+    myProfile,
+    user,
+    isPrimaryOwner,
+    isAdmin,
+    isViewer,
+    darkMode,
+    toggleDarkMode,
+    pendingEmailDraft,
+    clearPendingEmailDraft,
+  } = useHub();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const visibleItems = ALL_NAV_ITEMS.filter((item) => item.group !== 'admin' || isAdmin);
@@ -363,6 +374,9 @@ export function AppShell({ activeTab, onSelectTab, children }: AppShellProps) {
           </div>
         </div>
       )}
+
+      {/* Global Explicit Confirmation Modal for Gmail Notification Emails */}
+      <EmailConfirmModal draft={pendingEmailDraft} onClose={clearPendingEmailDraft} />
     </div>
   );
 }

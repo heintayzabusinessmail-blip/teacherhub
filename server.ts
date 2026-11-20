@@ -11,7 +11,7 @@ const app = express();
 app.use(express.json({ limit: '2mb' }));
 
 const PORT = Number(process.env.PORT) || 3000;
-const MODEL_NAME = 'gemini-4-hydrogen';
+const MODEL_NAME = 'gemini-3.1-flash-lite';
 
 interface HubDocumentInput {
   id: string;
@@ -175,7 +175,7 @@ ${docCatalog || '(No documents available)'}`;
         contents: prompt,
         config: {
           systemInstruction,
-          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+          thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
           responseMimeType: 'application/json',
           responseSchema: {
             type: Type.OBJECT,
@@ -312,31 +312,42 @@ app.post('/api/ask-coordinator', async (req, res) => {
       return;
     }
 
-    const trimmedMsg = message.trim().slice(0, 800);
-    const safeHistory = Array.isArray(history) ? history.slice(-8) : [];
+    const trimmedMsg = message.trim().slice(0, 2000);
+    const safeHistory = Array.isArray(history) ? history.slice(-12) : [];
 
     const historyText = safeHistory
-      .map((h) => `${h.role === 'teacher' ? 'TEACHER' : 'ASSISTANT COORDINATOR'}: ${h.text.slice(0, 600)}`)
+      .map((h) => `${h.role === 'teacher' ? 'TEACHER' : 'ASSISTANT COORDINATOR'}: ${h.text.slice(0, 900)}`)
       .join('\n');
 
-    const systemInstruction = `You are the "Assistant Coordinator" for YAO English — an online English school in Myanmar — coaching fellow English teachers in the warm, funny, human mentoring voice of Tr Hein Tay Za.
+    const systemInstruction = `You are the "Assistant Coordinator" for YAO English — an online English school in Myanmar — acting as an intelligent, all-purpose teaching assistant (like ChatGPT for teachers) with the warm, funny, human mentoring voice of Tr Hein Tay Za.
 
-YOUR KNOWLEDGE BASE (use accurately and practically):
-- Cambridge TKT (Modules 1, 2, 3: language systems & skills, learner needs, lesson planning & resources, classroom management, grading language, interaction patterns, error correction).
-- TESOL (Communicative Language Teaching, lowering the affective filter, scaffolding, differentiation, Zoom/online engagement, task staging, feedback).
-- Cambridge CELTA (PPP, TTT, TBL, Guided Discovery, MPF — Meaning/Pronunciation/Form, CCQs, ICQs, lowering TTT / maximizing STT, delayed error correction, crisp timing).
+SCOPE — ANSWER EVERYTHING RELATED TO TEACHING:
+You can help with ANY teaching or education topic the teacher asks for, including:
+- Complete lesson plans (PPP, TTT, TBL, Guided Discovery, Reading/Listening/Writing/Speaking stages with timings)
+- Ready-to-use classroom materials: worksheets, gap-fills, quizzes, CCQs/ICQs, speaking prompts, role-plays, warmers, icebreakers, games, homework tasks
+- Grammar, vocabulary, pronunciation/phonology, discourse, and functional English explanations (A1 to C2)
+- Exam prep (IELTS, Cambridge PET/FCE/CAE, Duolingo, TOEFL, school exams) & CEFR alignment
+- Cambridge TKT (Modules 1–3), TESOL, and Cambridge CELTA methodology & exam preparation
+- Classroom management, Zoom/online engagement, breakout rooms, mixed-ability differentiation, shy/distracted students, lowering TTT / maximizing STT
+- Assessment, rubrics, marking student writing samples, error correction strategies, and constructive feedback
+- Parent/student communication drafts, academic planning, teacher well-being, and professional development
 
-YOUR SIGNATURE COACHING STYLE — "INVERTED RATIO" + FUNNY LIKE TR HEIN:
-1. INVERT THE RATIO (BE CRISP & PUNCHY): Just like great CELTA/TESOL teachers cut Teacher Talking Time (TTT) and raise Student Talking Time (STT), keep EVERY field short, sharp, and practical — never write a long lecture!
-2. FUNNY & WARM OPENER ("funnyReaction"): 1–2 short witty sentences like Tr Hein chatting over coffee — light, relatable ELT humor (never mocking the teacher or students!). If the teacher is replying to your previous question, celebrate their answer playfully first!
-3. CLEAR TKT / TESOL / CELTA PRINCIPLE ("frameworkTag" & "pedagogyPrinciple"): Name the exact TKT, TESOL, or CELTA concept (e.g., "CELTA · CCQs & MPF", "TKT Module 3 · ICQs", "TESOL · Lowering TTT") + 1 simple sentence (max 25 words).
-4. REAL PRACTICE WAYS WITH WORKED EXAMPLES ("practiceWays"): Give exactly 2 concrete, ready-to-use classroom moves tailored to the teacher's exact input and level:
+GUARDRAIL FOR OFF-TOPIC QUESTIONS:
+- If the user asks something completely unrelated to teaching, learning, language, or education (e.g., crypto trading, celebrity gossip, unrelated coding), playfully joke in Tr Hein's voice that your brain is 100% wired for teaching, and invite them to ask anything about their classes, lessons, students, or English!
+
+YOUR SIGNATURE STYLE — CHATGPT CAPABILITY + TR HEIN'S WITTY INVERTED-RATIO COACHING:
+1. "funnyReaction": 1–2 short, witty, warm sentences like Tr Hein chatting over coffee — light, relatable teacher humor (never mocking teachers or students). If they replied to your previous question, celebrate their thought playfully first!
+2. "frameworkTag": Short label naming the teaching area or framework (e.g., "CELTA · Lesson Plan", "Grammar & MPF", "IELTS Speaking", "TESOL · Zoom Engagement", "Worksheet & Quiz Builder", "TKT Module 3").
+3. "directAnswer": Your complete, clear, ChatGPT-style answer to EVERYTHING they asked!
+   - If they asked for a lesson plan, quiz, worksheet, grammar explanation, writing feedback, email draft, or activity list -> deliver the FULL ready-to-use content cleanly structured with short headings, bullet points, or numbered steps (plain text formatting with line breaks — no ugly raw markdown tables).
+   - If they asked a coaching/classroom problem -> give a crisp, clear explanation of why it happens and the core TKT/TESOL/CELTA principle behind the fix.
+4. "practiceWays": Give 2 concrete, ready-to-use classroom practice moves tailored to their exact topic and level (empty array ONLY if the question was off-topic):
    - "title": 3–6 words
-   - "howToDoIt": 1 short practical sentence (Zoom-friendly where relevant)
-   - "realExample": a REAL word-for-word classroom script, CCQs/ICQs with Yes/No answers, or Zoom chat prompt using the teacher's exact topic (1–2 sentences, zero placeholders).
-5. FLIP THE RATIO BACK ("questionBack" & "quickReplies"): End with ONE simple, meaningful coaching question thrown back to the teacher + 3 short clickable reply options (max 8 words each) so they answer you back!
+   - "howToDoIt": 1–2 practical sentences
+   - "realExample": a REAL word-for-word classroom script, CCQ/ICQ with answers, student prompt, or worked example (zero placeholders).
+5. "questionBack" & "quickReplies": Always flip the talking ratio back at the end with ONE simple, meaningful follow-up question + 3 short clickable reply buttons (max 8 words each) so the teacher can keep iterating with you just like ChatGPT!
 
-LANGUAGE LEVEL: Clear, warm English for B1–C1 Myanmar English teachers. Lens: ${framework} | Level: ${level}.`;
+LANGUAGE LEVEL: Clear, natural, friendly English for Myanmar English teachers. Preferred lens: ${framework} | Student level: ${level}.`;
 
     const prompt = `${historyText ? `CONVERSATION SO FAR:\n${historyText}\n\n` : ''}TEACHER (${teacherName}) SAYS:
 ${trimmedMsg}
@@ -351,7 +362,7 @@ CONTEXT:
         contents: prompt,
         config: {
           systemInstruction,
-          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+          thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
           responseMimeType: 'application/json',
           responseSchema: {
             type: Type.OBJECT,
@@ -362,11 +373,12 @@ CONTEXT:
               },
               frameworkTag: {
                 type: Type.STRING,
-                description: 'Short label naming TKT, TESOL, or CELTA concept (e.g., "CELTA · CCQs & MPF").',
+                description: 'Short label naming the teaching topic or TKT/TESOL/CELTA lens.',
               },
-              pedagogyPrinciple: {
+              directAnswer: {
                 type: Type.STRING,
-                description: '1 simple, clear sentence explaining why this TKT/TESOL/CELTA principle works.',
+                description:
+                  'Complete, clear, ChatGPT-style helpful answer to any teaching request (lesson plan, quiz, explanation, rubric, advice, etc.), cleanly formatted with line breaks and bullets.',
               },
               practiceWays: {
                 type: Type.ARRAY,
@@ -386,18 +398,18 @@ CONTEXT:
               questionBack: {
                 type: Type.STRING,
                 description:
-                  '1 simple, meaningful coaching question flipped back to the teacher to invite their reply.',
+                  '1 simple, meaningful coaching or follow-up question flipped back to the teacher.',
               },
               quickReplies: {
                 type: Type.ARRAY,
                 items: { type: Type.STRING },
-                description: '2-3 short, natural teacher replies they can click to answer the question back.',
+                description: '3 short, natural follow-up replies or tweaks the teacher can click.',
               },
             },
             required: [
               'funnyReaction',
               'frameworkTag',
-              'pedagogyPrinciple',
+              'directAnswer',
               'practiceWays',
               'questionBack',
               'quickReplies',
@@ -410,7 +422,7 @@ CONTEXT:
     const parsed = parseJsonSafe<{
       funnyReaction: string;
       frameworkTag: string;
-      pedagogyPrinciple: string;
+      directAnswer: string;
       practiceWays: Array<{ title: string; howToDoIt: string; realExample: string }>;
       questionBack: string;
       quickReplies: string[];
@@ -418,10 +430,11 @@ CONTEXT:
 
     res.json({
       funnyReaction: parsed.funnyReaction || '',
-      frameworkTag: parsed.frameworkTag || 'TKT · TESOL · CELTA',
-      pedagogyPrinciple: parsed.pedagogyPrinciple || '',
+      frameworkTag: parsed.frameworkTag || 'Teaching Assistant · TKT · TESOL · CELTA',
+      directAnswer: parsed.directAnswer || '',
+      pedagogyPrinciple: parsed.directAnswer || '',
       practiceWays: Array.isArray(parsed.practiceWays) ? parsed.practiceWays.slice(0, 3) : [],
-      questionBack: parsed.questionBack || 'Which of these moves would you try first in your next lesson?',
+      questionBack: parsed.questionBack || 'Would you like me to adapt this for a different level, timing, or activity?',
       quickReplies: Array.isArray(parsed.quickReplies) ? parsed.quickReplies.slice(0, 3) : [],
     });
   } catch (err) {

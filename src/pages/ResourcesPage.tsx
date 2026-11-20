@@ -27,7 +27,7 @@ import {
   setDoc,
   updateDoc,
 } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from '../firebase';
+import { BOOTSTRAPPED_ADMIN_EMAIL, db, handleFirestoreError, OperationType } from '../firebase';
 import { useHub } from '../context/HubContext';
 import { PAGE_SUMMARIES } from '../content/planContent';
 import { PageHeader } from '../components/PageHeader';
@@ -47,7 +47,16 @@ interface ResourcesPageProps {
 }
 
 export function ResourcesPage({ onNavigate }: ResourcesPageProps) {
-  const { user, isAdmin, canInteract, myProfile, resources, myResourceStates, faqs } = useHub();
+  const {
+    user,
+    isAdmin,
+    canInteract,
+    myProfile,
+    resources,
+    myResourceStates,
+    faqs,
+    queueEmailConfirmation,
+  } = useHub();
 
   const [scope, setScope] = useState<ViewScope>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -271,15 +280,26 @@ export function ResourcesPage({ onNavigate }: ResourcesPageProps) {
         });
         if (!isAdmin) {
           const teacherName = (myProfile?.displayName || user.displayName || 'Teacher').slice(0, 120);
+          const resTitle = `New resource suggestion from ${teacherName}`;
+          const resMsg = `${fTitle.trim().slice(0, 140)} (${fLevel} · ${fSkill} · ${fType}) is waiting for your approval.`;
           await notifyAdminOfTeacherAction({
             actorUid: user.uid,
             actorName: teacherName,
             category: 'resource_suggested',
-            title: `New resource suggestion from ${teacherName}`,
-            message: `${fTitle.trim().slice(0, 140)} (${fLevel} · ${fSkill} · ${fType}) is waiting for your approval.`,
+            title: resTitle,
+            message: resMsg,
             targetTab: 'admin',
             priority: 'normal',
           });
+          if (user.email?.toLowerCase() !== BOOTSTRAPPED_ADMIN_EMAIL) {
+            queueEmailConfirmation({
+              heading: 'Email this resource suggestion to Tr Hein',
+              recipients: [BOOTSTRAPPED_ADMIN_EMAIL],
+              subject: `[YAO Hub] ${resTitle}`,
+              bodyText: `${resMsg}\nLink: ${fUrl.trim().slice(0, 400)}\n\nReview and approve in Admin Dashboard → Teacher Submissions.`,
+              senderLabel: `Suggested by ${teacherName}`,
+            });
+          }
         }
       }
       setShowAddForm(false);

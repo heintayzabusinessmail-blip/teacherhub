@@ -19,7 +19,7 @@ import {
   setDoc,
   updateDoc,
 } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from '../firebase';
+import { BOOTSTRAPPED_ADMIN_EMAIL, db, handleFirestoreError, OperationType } from '../firebase';
 import { useHub } from '../context/HubContext';
 import { PAGE_SUMMARIES, SURVEY_HELP_TOPICS } from '../content/planContent';
 import { PageHeader } from '../components/PageHeader';
@@ -27,7 +27,16 @@ import { notifyAdminOfTeacherAction } from '../utils/notifications';
 import type { FaqItem } from '../types';
 
 export function VoicePage() {
-  const { user, isAdmin, canInteract, myProfile, mySurvey, faqs, suggestions } = useHub();
+  const {
+    user,
+    isAdmin,
+    canInteract,
+    myProfile,
+    mySurvey,
+    faqs,
+    suggestions,
+    queueEmailConfirmation,
+  } = useHub();
 
   // 1. Month 1 Needs Survey State
   const [selectedTopics, setSelectedTopics] = useState<string[]>([]);
@@ -113,18 +122,31 @@ export function VoicePage() {
         });
       }
 
+      const surveyTitle = `${payload.teacherName} ${mySurvey ? 'updated' : 'submitted'} the Month 1 Needs Survey`;
+      const surveySummary =
+        payload.helpTopics.length > 0
+          ? `Requested help with: ${payload.helpTopics.slice(0, 6).join(', ')}${payload.feedbackStyle ? `\nPreferred feedback style: ${payload.feedbackStyle}` : ''}${payload.bestTimes ? `\nBest times (MMT): ${payload.bestTimes}` : ''}${payload.ideas ? `\nNotes: ${payload.ideas}` : ''}`
+          : payload.ideas || 'Submitted Month 1 Needs Survey responses.';
+
       await notifyAdminOfTeacherAction({
         actorUid: user.uid,
         actorName: payload.teacherName,
         category: 'survey_submitted',
-        title: `${payload.teacherName} ${mySurvey ? 'updated' : 'submitted'} the Month 1 Needs Survey`,
-        message:
-          payload.helpTopics.length > 0
-            ? `Requested help with: ${payload.helpTopics.slice(0, 4).join(', ')}${payload.bestTimes ? ` · Best times: ${payload.bestTimes}` : ''}`
-            : payload.ideas || 'Submitted Month 1 Needs Survey responses.',
+        title: surveyTitle,
+        message: surveySummary.slice(0, 600),
         targetTab: 'admin',
         priority: 'important',
       });
+
+      if (user.email?.toLowerCase() !== BOOTSTRAPPED_ADMIN_EMAIL) {
+        queueEmailConfirmation({
+          heading: 'Send survey notification email to Tr Hein',
+          recipients: [BOOTSTRAPPED_ADMIN_EMAIL],
+          subject: `[YAO Hub] ${surveyTitle}`,
+          bodyText: `${surveyTitle}\n\n${surveySummary}\n\nView full responses in Admin Dashboard → Surveys & Box.`,
+          senderLabel: `Submitted by ${payload.teacherName}`,
+        });
+      }
 
       setSurveySavedMsg('Thank you! Your Month 1 Needs Survey is saved.');
     } catch (err) {
@@ -166,15 +188,26 @@ export function VoicePage() {
         updatedAt: now,
       });
       const askerName = (myProfile?.displayName || user.displayName || 'Teacher').slice(0, 120);
+      const faqTitle = `New FAQ question from ${askerName} (${qLevel})`;
+      const faqBody = qText.trim().slice(0, 400);
       await notifyAdminOfTeacherAction({
         actorUid: user.uid,
         actorName: askerName,
         category: 'faq_asked',
-        title: `New FAQ question from ${askerName} (${qLevel})`,
-        message: qText.trim().slice(0, 400),
+        title: faqTitle,
+        message: faqBody,
         targetTab: 'voice',
         priority: 'normal',
       });
+      if (user.email?.toLowerCase() !== BOOTSTRAPPED_ADMIN_EMAIL) {
+        queueEmailConfirmation({
+          heading: 'Email this FAQ question to Tr Hein',
+          recipients: [BOOTSTRAPPED_ADMIN_EMAIL],
+          subject: `[YAO Hub] ${faqTitle}`,
+          bodyText: `${askerName} posted a ${qLevel} (${qCategory}) question in Teacher Voice & FAQ:\n\n"${faqBody}"`,
+          senderLabel: `Asked by ${askerName}`,
+        });
+      }
       setQText('');
       setShowAskFaq(false);
     } catch (err) {

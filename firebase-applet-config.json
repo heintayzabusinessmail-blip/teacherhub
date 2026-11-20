@@ -1,12 +1,12 @@
 {
-  "projectId": "rich-ego-vlcf1",
-  "appId": "1:664229165771:web:c55874b64fc05ab751794e",
-  "apiKey": "AIzaSyDGOzWwq5ZfwPKfwm7l1231Y3MPvKgwd_0",
-  "authDomain": "rich-ego-vlcf1.firebaseapp.com",
+  "projectId": "gen-lang-client-0093095840",
+  "appId": "1:918552455342:web:83a91218ba5115ce03253f",
+  "apiKey": "AIzaSyAwgRi2-dOvS0UVzKUIOUhSIUCImmUSH9A",
+  "authDomain": "gen-lang-client-0093095840.firebaseapp.com",
   "firestoreDatabaseId": "ai-studio-2548c5c6-1f68-4577-8302-39af90bb27d6",
-  "storageBucket": "rich-ego-vlcf1.firebasestorage.app",
-  "messagingSenderId": "664229165771",
+  "storageBucket": "gen-lang-client-0093095840.firebasestorage.app",
+  "messagingSenderId": "918552455342",
   "measurementId": "",
-  "oAuthClientId": "664229165771-s81si45i9egaocj3fp359h3h2c77m0o7.apps.googleusercontent.com",
+  "oAuthClientId": "918552455342-alh2a4q1t4rla5shjetinulbt7sjgtiv.apps.googleusercontent.com",
   "recaptchaSiteKey": ""
 }

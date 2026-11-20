@@ -826,7 +826,7 @@ service cloud.firestore {
         || (isAllowedUser() && existing().audience == 'all')
       );
       allow list: if isAdmin()
-        || (isInteractiveUser() && resource.data.audience in ['all', 'teachers'])
+        || (isInteractiveUser() && resource.data.audience == 'teachers')
         || (isAllowedUser() && resource.data.audience == 'all');
       allow create: if isInteractiveUser() && isValidId(notifId)
         && isValidNotification(incoming())

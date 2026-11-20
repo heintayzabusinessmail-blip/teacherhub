@@ -11,13 +11,16 @@ import {
 import {
   auth,
   BOOTSTRAPPED_ADMIN_EMAIL,
+  clearGmailAccessToken,
   completeEmailLinkSignInIfPresent,
   db,
   emailToKey,
   handleFirestoreError,
   OperationType,
+  subscribeGmailTokenState,
   testConnection,
 } from '../firebase';
+import type { PendingEmailDraft } from '../components/EmailConfirmModal';
 import type {
   AllowlistEntry,
   AnonymousSuggestion,
@@ -55,6 +58,10 @@ interface HubContextValue {
   syncError: Error | null;
   darkMode: boolean;
   toggleDarkMode: () => void;
+  gmailConnected: boolean;
+  pendingEmailDraft: PendingEmailDraft | null;
+  queueEmailConfirmation: (draft: PendingEmailDraft) => void;
+  clearPendingEmailDraft: () => void;
 
   // Live collections
   allowlist: AllowlistEntry[];
@@ -89,6 +96,11 @@ export function HubProvider({ children }: { children: React.ReactNode }) {
   const [role, setRole] = useState<UserRole>('viewer');
   const [profileLoaded, setProfileLoaded] = useState(false);
   const [syncError, setSyncError] = useState<Error | null>(null);
+  const [gmailConnected, setGmailConnected] = useState(false);
+  const [pendingEmailDraft, setPendingEmailDraft] = useState<PendingEmailDraft | null>(null);
+
+  const queueEmailConfirmation = (draft: PendingEmailDraft) => setPendingEmailDraft(draft);
+  const clearPendingEmailDraft = () => setPendingEmailDraft(null);
 
   const [darkMode, setDarkMode] = useState<boolean>(() => {
     try {
@@ -153,11 +165,17 @@ export function HubProvider({ children }: { children: React.ReactNode }) {
       });
   }, []);
 
+  // Track in-memory Gmail connection state
+  useEffect(() => {
+    return subscribeGmailTokenState(setGmailConnected);
+  }, []);
+
   // Auth listener + allowlist verification
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
       if (!firebaseUser || !firebaseUser.email) {
+        clearGmailAccessToken();
         setIsAllowed(false);
         setRole('viewer');
         setProfileLoaded(false);
@@ -521,15 +539,33 @@ export function HubProvider({ children }: { children: React.ReactNode }) {
         )
       );
     } else if (canInteract) {
+      let allAudience: HubNotification[] = [];
+      let teachersAudience: HubNotification[] = [];
+      const mergeNotifs = () => {
+        const map = new Map<string, HubNotification>();
+        [...allAudience, ...teachersAudience].forEach((n) => map.set(n.id, n));
+        const list = Array.from(map.values());
+        list.sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0));
+        setNotifications(list);
+      };
       unsubs.push(
         onSnapshot(
-          query(collection(db, 'notifications'), where('audience', 'in', ['all', 'teachers'])),
+          query(collection(db, 'notifications'), where('audience', '==', 'all')),
           (snap) => {
-            const list = snap.docs.map((d) => ({ ...(d.data() as HubNotification), id: d.id }));
-            list.sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0));
-            setNotifications(list);
+            allAudience = snap.docs.map((d) => ({ ...(d.data() as HubNotification), id: d.id }));
+            mergeNotifs();
           },
-          (err) => reportSnapshotError(err, OperationType.LIST, 'notifications/teacher')
+          (err) => reportSnapshotError(err, OperationType.LIST, 'notifications/all')
+        )
+      );
+      unsubs.push(
+        onSnapshot(
+          query(collection(db, 'notifications'), where('audience', '==', 'teachers')),
+          (snap) => {
+            teachersAudience = snap.docs.map((d) => ({ ...(d.data() as HubNotification), id: d.id }));
+            mergeNotifs();
+          },
+          (err) => reportSnapshotError(err, OperationType.LIST, 'notifications/teachers')
         )
       );
     } else {
@@ -629,6 +665,10 @@ export function HubProvider({ children }: { children: React.ReactNode }) {
     syncError,
     darkMode,
     toggleDarkMode,
+    gmailConnected,
+    pendingEmailDraft,
+    queueEmailConfirmation,
+    clearPendingEmailDraft,
     allowlist,
     teachers,
     hubConfig,

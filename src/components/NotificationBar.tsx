@@ -5,6 +5,7 @@ import {
   BellRing,
   Check,
   CheckCheck,
+  Mail,
   Megaphone,
   Plus,
   Send,
@@ -29,7 +30,14 @@ function formatNotifTime(n: HubNotification): string {
 }
 
 export function NotificationBar({ onSelectTab }: NotificationBarProps) {
-  const { user, isAdmin, myProfile, notifications } = useHub();
+  const {
+    user,
+    isAdmin,
+    myProfile,
+    notifications,
+    allowlist,
+    queueEmailConfirmation,
+  } = useHub();
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [adminDrawerTab, setAdminDrawerTab] = useState<'alerts' | 'notices'>('alerts');
@@ -41,6 +49,8 @@ export function NotificationBar({ onSelectTab }: NotificationBarProps) {
   const [nAudience, setNAudience] = useState<'all' | 'teachers'>('all');
   const [nPriority, setNPriority] = useState<'important' | 'normal'>('important');
   const [nTargetTab, setNTargetTab] = useState<NavTab | ''>('');
+  const [extraRecipientsText, setExtraRecipientsText] = useState('');
+  const [includeSelfCopy, setIncludeSelfCopy] = useState(false);
   const [publishing, setPublishing] = useState(false);
 
   // Locally tracked seen notice IDs for non-admin users (works for both Teachers and View-Only)
@@ -127,25 +137,106 @@ export function NotificationBar({ onSelectTab }: NotificationBarProps) {
     }
   };
 
+  const getRegisteredEmailsForAudience = (
+    audience: 'all' | 'teachers',
+    extraRaw = '',
+    withSelfCopy = false
+  ): string[] => {
+    const myEmail = (user?.email || '').trim().toLowerCase();
+    const collected = new Set<string>();
+
+    // 1. All matching allowlisted emails (Admin → Edit Access & Special Roles)
+    allowlist.forEach((entry) => {
+      if (entry.isSample || !entry.email || !entry.email.includes('@')) return;
+      const matches =
+        audience === 'teachers'
+          ? entry.role === 'teacher'
+          : entry.role === 'teacher' || entry.role === 'viewer' || entry.role === 'admin';
+      if (matches) {
+        collected.add(entry.email.trim().toLowerCase());
+      }
+    });
+
+    // 2. Optional extra emails typed by Admin in the composer
+    if (extraRaw.trim()) {
+      extraRaw
+        .split(/[\s,;]+/)
+        .map((e) => e.trim().toLowerCase())
+        .filter((e) => e.includes('@') && e.includes('.'))
+        .forEach((e) => collected.add(e));
+    }
+
+    if (withSelfCopy && myEmail.includes('@')) {
+      collected.add(myEmail);
+    } else if (!withSelfCopy && myEmail) {
+      collected.delete(myEmail);
+    }
+
+    return Array.from(collected);
+  };
+
+  const composerRecipients = useMemo(
+    () => getRegisteredEmailsForAudience(nAudience, extraRecipientsText, includeSelfCopy),
+    [allowlist, user?.email, nAudience, extraRecipientsText, includeSelfCopy]
+  );
+
+  const openNoticeEmailPrompt = (
+    title: string,
+    message: string,
+    audience: 'all' | 'teachers',
+    priority: 'important' | 'normal',
+    explicitRecipients?: string[]
+  ) => {
+    const recipients = explicitRecipients ?? getRegisteredEmailsForAudience(audience);
+    if (recipients.length === 0) return;
+    const prefix = priority === 'important' ? '[YAO Important Notice]' : '[YAO Hub Notice]';
+    const senderName = myProfile?.displayName || user?.displayName || 'Tr Hein Tay Za';
+    queueEmailConfirmation({
+      heading: `Email notice to ${recipients.length} registered recipient${recipients.length === 1 ? '' : 's'}`,
+      recipients,
+      subject: `${prefix} ${title.trim()}`,
+      bodyText: `${message.trim()}\n\n— ${senderName} (YAO English Teacher Hub)`,
+      senderLabel: `From ${senderName}`,
+    });
+  };
+
   const handlePublishNotice = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !isAdmin || !nTitle.trim() || !nMessage.trim()) return;
     setPublishing(true);
+    const savedTitle = nTitle.trim();
+    const savedMessage = nMessage.trim();
+    const savedAudience = nAudience;
+    const savedPriority = nPriority;
+    const savedRecipients = getRegisteredEmailsForAudience(
+      savedAudience,
+      extraRecipientsText,
+      includeSelfCopy
+    );
     try {
       await publishAdminNotice({
         actorUid: user.uid,
         actorName: myProfile?.displayName || user.displayName || 'Tr Hein Tay Za',
-        audience: nAudience,
-        priority: nPriority,
-        title: nTitle,
-        message: nMessage,
+        audience: savedAudience,
+        priority: savedPriority,
+        title: savedTitle,
+        message: savedMessage,
         targetTab: nTargetTab,
       });
       setNTitle('');
       setNMessage('');
       setNTargetTab('');
+      setExtraRecipientsText('');
+      setIncludeSelfCopy(false);
       setShowComposer(false);
       setAdminDrawerTab('notices');
+      openNoticeEmailPrompt(
+        savedTitle,
+        savedMessage,
+        savedAudience,
+        savedPriority,
+        savedRecipients
+      );
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, 'notifications');
     } finally {
@@ -525,22 +616,79 @@ export function NotificationBar({ onSelectTab }: NotificationBarProps) {
                       <option value="roadmap">Link to: 6-Month Roadmap</option>
                     </select>
                   </div>
-                  <div className="flex justify-end gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setShowComposer(false)}
-                      className="min-h-[38px] px-3.5 py-1.5 rounded-xl border border-[#E5D9EC] text-xs font-medium"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={publishing || !nTitle.trim() || !nMessage.trim()}
-                      className="min-h-[38px] inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-[#A8567F] hover:bg-[#91446A] text-white text-xs font-semibold disabled:opacity-50"
-                    >
-                      <Send className="w-3.5 h-3.5" />
-                      {publishing ? 'Publishing...' : 'Publish notice'}
-                    </button>
+                  {/* Registered email recipients preview + optional extra emails */}
+                  <div className="rounded-xl bg-white dark:bg-[#1F1629] border border-[#E5D9EC] dark:border-[#332442] p-3 space-y-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-[11px] font-semibold text-[#3B1050] dark:text-[#E8D5F5] flex items-center gap-1.5">
+                        <Mail className="w-3.5 h-3.5 text-[#A8567F]" />
+                        Email recipients ({composerRecipients.length})
+                      </span>
+                      <label className="inline-flex items-center gap-1.5 text-[11px] text-[#5A4A66] dark:text-[#BBAAC9] cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={includeSelfCopy}
+                          onChange={(e) => setIncludeSelfCopy(e.target.checked)}
+                          className="rounded border-[#C9B3D9]"
+                        />
+                        Send a copy to my own email
+                      </label>
+                    </div>
+
+                    {composerRecipients.length > 0 ? (
+                      <div className="flex flex-wrap gap-1.5 max-h-20 overflow-y-auto">
+                        {composerRecipients.map((email) => (
+                          <span
+                            key={email}
+                            className="px-2 py-0.5 rounded-md bg-[#FAF7FC] dark:bg-[#160F1F] border border-[#E5D9EC] dark:border-[#332442] text-[11px] text-[#3B1050] dark:text-[#E8D5F5]"
+                          >
+                            {email}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 rounded-lg px-2.5 py-1.5">
+                        No registered teacher emails found yet. Add teacher emails in{' '}
+                        <strong>Admin Dashboard → Edit Access &amp; Special Roles</strong>, or type
+                        recipient email(s) below.
+                      </p>
+                    )}
+
+                    <input
+                      type="text"
+                      value={extraRecipientsText}
+                      onChange={(e) => setExtraRecipientsText(e.target.value)}
+                      placeholder="Optional extra email(s), separated by commas (e.g., teacher@gmail.com)"
+                      className="w-full min-h-[36px] px-2.5 py-1.5 rounded-lg border border-[#E5D9EC] dark:border-[#332442] bg-[#FAF7FC] dark:bg-[#160F1F] text-xs"
+                    />
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-[11px] text-[#5A4A66] dark:text-[#BBAAC9]">
+                      {composerRecipients.length > 0
+                        ? `Publishing shows the notice on-site and opens Gmail confirmation for ${composerRecipients.length} email(s).`
+                        : 'Notice will appear on-site. Add recipient emails above to send via Gmail too.'}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowComposer(false)}
+                        className="min-h-[38px] px-3.5 py-1.5 rounded-xl border border-[#E5D9EC] text-xs font-medium"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={publishing || !nTitle.trim() || !nMessage.trim()}
+                        className="min-h-[38px] inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-[#A8567F] hover:bg-[#91446A] text-white text-xs font-semibold disabled:opacity-50"
+                      >
+                        <Send className="w-3.5 h-3.5" />
+                        {publishing
+                          ? 'Publishing...'
+                          : composerRecipients.length > 0
+                            ? `Publish & Email (${composerRecipients.length})`
+                            : 'Publish Notice'}
+                      </button>
+                    </div>
                   </div>
                 </form>
               )}
@@ -700,16 +848,37 @@ export function NotificationBar({ onSelectTab }: NotificationBarProps) {
                               )}
                             </div>
 
-                            {n.targetTab && (
-                              <button
-                                type="button"
-                                onClick={() => handleJump(n)}
-                                className="min-h-[34px] inline-flex items-center gap-1 px-3 py-1 rounded-lg bg-[#3B1050] text-white text-xs font-semibold"
-                              >
-                                Open section
-                                <ArrowRight className="w-3.5 h-3.5" />
-                              </button>
-                            )}
+                            <div className="flex flex-wrap items-center gap-2 pt-1">
+                              {n.targetTab && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleJump(n)}
+                                  className="min-h-[34px] inline-flex items-center gap-1 px-3 py-1 rounded-lg bg-[#3B1050] text-white text-xs font-semibold"
+                                >
+                                  Open section
+                                  <ArrowRight className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                              {isAdmin &&
+                                (n.audience === 'all' || n.audience === 'teachers') &&
+                                getRegisteredEmailsForAudience(n.audience).length > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      openNoticeEmailPrompt(
+                                        n.title,
+                                        n.message,
+                                        n.audience as 'all' | 'teachers',
+                                        n.priority
+                                      )
+                                    }
+                                    className="min-h-[34px] inline-flex items-center gap-1.5 px-3 py-1 rounded-lg border border-[#E5D9EC] dark:border-[#332442] text-xs font-semibold text-[#3B1050] dark:text-[#E8D5F5] hover:border-[#A8567F]"
+                                  >
+                                    <Mail className="w-3.5 h-3.5 text-[#A8567F]" />
+                                    Email registered ({getRegisteredEmailsForAudience(n.audience).length})
+                                  </button>
+                                )}
+                            </div>
                           </div>
                         );
                       })}

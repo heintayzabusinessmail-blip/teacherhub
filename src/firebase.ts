@@ -20,8 +20,39 @@ export const BOOTSTRAPPED_ADMIN_EMAIL = 'heintayzabusinessmail@gmail.com';
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth(app);
+export const WORKSPACE_SCOPES = [
+  'https://www.googleapis.com/auth/gmail.send',
+];
+
 export const googleProvider = new GoogleAuthProvider();
+WORKSPACE_SCOPES.forEach((scope) => googleProvider.addScope(scope));
 googleProvider.setCustomParameters({ prompt: 'select_account' });
+
+// In-memory cache ONLY for Google Workspace OAuth access token (never stored in localStorage/sessionStorage)
+let cachedGmailAccessToken: string | null = null;
+const tokenListeners = new Set<(connected: boolean) => void>();
+
+function setCachedGmailToken(token: string | null) {
+  cachedGmailAccessToken = token;
+  const connected = Boolean(token);
+  tokenListeners.forEach((fn) => fn(connected));
+}
+
+export function subscribeGmailTokenState(listener: (connected: boolean) => void): () => void {
+  tokenListeners.add(listener);
+  listener(Boolean(cachedGmailAccessToken));
+  return () => {
+    tokenListeners.delete(listener);
+  };
+}
+
+export function getGmailAccessToken(): string | null {
+  return cachedGmailAccessToken;
+}
+
+export function clearGmailAccessToken(): void {
+  setCachedGmailToken(null);
+}
 
 export function emailToKey(email: string): string {
   return email.trim().toLowerCase().replace(/[^a-z0-9]/g, '_');
@@ -94,7 +125,31 @@ export function handleFirestoreError(
 }
 
 export async function signInWithGooglePopup() {
-  return signInWithPopup(auth, googleProvider);
+  const result = await signInWithPopup(auth, googleProvider);
+  const credential = GoogleAuthProvider.credentialFromResult(result);
+  if (credential?.accessToken) {
+    setCachedGmailToken(credential.accessToken);
+  }
+  return result;
+}
+
+/**
+ * Re-requests Google Workspace Gmail permission in a user-clicked popup
+ * when the in-memory access token is absent (e.g., after a browser refresh).
+ */
+export async function connectGmailPopup(): Promise<string | null> {
+  const gmailProvider = new GoogleAuthProvider();
+  WORKSPACE_SCOPES.forEach((scope) => gmailProvider.addScope(scope));
+  const loginHint = auth.currentUser?.email || undefined;
+  gmailProvider.setCustomParameters({
+    prompt: 'consent',
+    ...(loginHint ? { login_hint: loginHint } : {}),
+  });
+  const result = await signInWithPopup(auth, gmailProvider);
+  const credential = GoogleAuthProvider.credentialFromResult(result);
+  const token = credential?.accessToken || null;
+  setCachedGmailToken(token);
+  return token;
 }
 
 export async function sendEmailSignInLink(email: string) {
@@ -128,5 +183,6 @@ export async function completeEmailLinkWithAddress(email: string) {
 }
 
 export async function signOutUser() {
+  clearGmailAccessToken();
   return signOut(auth);
 }
