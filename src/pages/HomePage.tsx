@@ -472,7 +472,7 @@ export function HomePage({ onNavigate }: HomePageProps) {
               onClick={() => onNavigate('team')}
               className="text-xs font-semibold text-[#3B1050] dark:text-[#E2B8D0] hover:underline"
             >
-              Say hello →
+              {isAdmin ? 'Say hello →' : 'View team →'}
             </button>
           </div>
 
@@ -480,7 +480,7 @@ export function HomePage({ onNavigate }: HomePageProps) {
             <div className="py-6 text-center space-y-2">
               <MessageCircle className="w-7 h-7 text-[#BBAAC9] mx-auto" />
               <p className="text-sm text-[#5A4A66] dark:text-[#BBAAC9]">
-                No team greetings yet. Visit “Meet the Team” to say hello to a colleague!
+                No coordinator greetings posted yet. Check back here for updates from Tr Hein!
               </p>
             </div>
           ) : (

@@ -480,17 +480,15 @@ service cloud.firestore {
       allow delete: if isAdmin() && isValidId(configId);
     }
 
-    // 4. Home Hello Feed & Weekly Icebreaker Answers
+    // 4. Home Hello Feed & Weekly Icebreaker Posts (Admins only can post/delete)
     match /helloFeed/{postId} {
       allow get: if isAllowedUser() && isValidId(postId);
       allow list: if isAllowedUser();
-      allow create: if isInteractiveUser() && isValidId(postId)
+      allow create: if isAdmin() && isValidId(postId)
         && isValidHelloPost(incoming())
-        && incoming().createdAt == request.time
-        && (isAdmin() || (incoming().authorUid == request.auth.uid && incoming().isSample == false));
+        && incoming().createdAt == request.time;
       allow update: if false;
-      allow delete: if isInteractiveUser() && isValidId(postId)
-        && (isAdmin() || existing().authorUid == request.auth.uid);
+      allow delete: if isAdmin() && isValidId(postId);
     }
 
     // 5. Curriculum Maps & Comments (Master Gate on subcollection)

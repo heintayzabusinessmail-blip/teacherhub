@@ -129,7 +129,7 @@ export function TeamPage() {
 
   const handleSendHello = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !canInteract || !helloTarget || !helloText.trim()) return;
+    if (!user || !isAdmin || !helloTarget || !helloText.trim()) return;
     setSendingHello(true);
     try {
       await addDoc(collection(db, 'helloFeed'), {
@@ -154,7 +154,7 @@ export function TeamPage() {
 
   const handlePostIcebreaker = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !canInteract || !iceAnswer.trim()) return;
+    if (!user || !isAdmin || !iceAnswer.trim()) return;
     setSendingIce(true);
     try {
       await addDoc(collection(db, 'helloFeed'), {
@@ -352,7 +352,7 @@ export function TeamPage() {
             </p>
           )}
 
-          {canInteract && (
+          {isAdmin && (
             <form onSubmit={handlePostIcebreaker} className="flex gap-2">
               <input
                 type="text"
@@ -518,7 +518,7 @@ export function TeamPage() {
                       <Edit3 className="w-3.5 h-3.5" />
                       Edit my card
                     </button>
-                  ) : canInteract ? (
+                  ) : isAdmin ? (
                     <button
                       type="button"
                       onClick={() => {
