@@ -1,0 +1,802 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net: Default deny all unmatched paths
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // =========================================================================
+    // Global Primitives & Identity Helpers
+    // =========================================================================
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isVerified() {
+      return request.auth != null
+        && request.auth.token.email is string
+        && request.auth.token.email.size() > 3
+        && request.auth.token.email_verified == true;
+    }
+
+    function myEmailKey() {
+      return request.auth.token.email.lower().replace('[^a-z0-9]', '_');
+    }
+
+    function isBootstrappedAdmin() {
+      return isVerified()
+        && request.auth.token.email.lower() == 'heintayzabusinessmail@gmail.com';
+    }
+
+    function isAdmin() {
+      return isBootstrappedAdmin()
+        || (
+          isVerified()
+          && exists(/databases/$(database)/documents/allowlist/$(myEmailKey()))
+          && get(/databases/$(database)/documents/allowlist/$(myEmailKey())).data.role == 'admin'
+        );
+    }
+
+    function isAllowedUser() {
+      return isBootstrappedAdmin()
+        || (
+          isVerified()
+          && exists(/databases/$(database)/documents/allowlist/$(myEmailKey()))
+        );
+    }
+
+    function isValidString(val, minLen, maxLen) {
+      return val is string && val.size() >= minLen && val.size() <= maxLen;
+    }
+
+    function isValidStringList(val, maxItems) {
+      return val is list
+        && val.size() <= maxItems
+        && (val.size() == 0 || (val[0] is string && val[0].size() <= 200));
+    }
+
+    // =========================================================================
+    // Entity Validation Blueprints (Anti-Update-Gap)
+    // =========================================================================
+
+    function isValidAllowlistEntry(data) {
+      return data.keys().hasAll(['email', 'role', 'displayName', 'addedBy', 'isSample', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['email', 'role', 'displayName', 'addedBy', 'isSample', 'createdAt', 'updatedAt'])
+        && isValidString(data.email, 5, 200)
+        && data.role in ['admin', 'teacher']
+        && isValidString(data.displayName, 1, 120)
+        && isValidString(data.addedBy, 1, 128)
+        && data.isSample is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidChecklist(c) {
+      return c is map
+        && c.keys().hasAll(['profileDone', 'surveyDone', 'oneToOneBooked', 'observationScheduled', 'trainingAttended'])
+        && c.keys().hasOnly(['profileDone', 'surveyDone', 'oneToOneBooked', 'observationScheduled', 'trainingAttended'])
+        && c.profileDone is bool
+        && c.surveyDone is bool
+        && c.oneToOneBooked is bool
+        && c.observationScheduled is bool
+        && c.trainingAttended is bool;
+    }
+
+    function isValidTeacherProfile(data) {
+      return data.keys().hasAll([
+          'uid', 'displayName', 'photoUrl', 'levels', 'classesTaught', 'languages',
+          'yearsTeaching', 'goodAt', 'wantHelpWith', 'funFact', 'favouriteActivity',
+          'onboardingComplete', 'checklist', 'isSample', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'uid', 'displayName', 'photoUrl', 'levels', 'classesTaught', 'languages',
+          'yearsTeaching', 'goodAt', 'wantHelpWith', 'funFact', 'favouriteActivity',
+          'onboardingComplete', 'checklist', 'isSample', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.uid)
+        && isValidString(data.displayName, 1, 120)
+        && isValidString(data.photoUrl, 0, 150000)
+        && isValidStringList(data.levels, 10)
+        && isValidString(data.classesTaught, 0, 200)
+        && isValidString(data.languages, 0, 200)
+        && data.yearsTeaching is number && data.yearsTeaching >= 0 && data.yearsTeaching <= 60
+        && isValidString(data.goodAt, 0, 300)
+        && isValidString(data.wantHelpWith, 0, 300)
+        && isValidString(data.funFact, 0, 300)
+        && isValidString(data.favouriteActivity, 0, 300)
+        && data.onboardingComplete is bool
+        && isValidChecklist(data.checklist)
+        && data.isSample is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidHubConfig(data) {
+      return data.keys().hasAll(['kind', 'title', 'body', 'updatedBy', 'updatedAt'])
+        && data.keys().hasOnly(['kind', 'title', 'body', 'teacherUid', 'teacherName', 'percent', 'updatedBy', 'updatedAt'])
+        && data.kind in ['pinned', 'spotlight', 'icebreaker', 'progress']
+        && isValidString(data.title, 0, 180)
+        && isValidString(data.body, 0, 1200)
+        && (!('teacherUid' in data) || isValidString(data.teacherUid, 0, 128))
+        && (!('teacherName' in data) || isValidString(data.teacherName, 0, 120))
+        && (!('percent' in data) || (data.percent is number && data.percent >= 0 && data.percent <= 100))
+        && isValidString(data.updatedBy, 1, 120)
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidHelloPost(data) {
+      return data.keys().hasAll(['authorUid', 'authorName', 'type', 'targetName', 'message', 'isSample', 'createdAt'])
+        && data.keys().hasOnly(['authorUid', 'authorName', 'type', 'targetName', 'message', 'isSample', 'createdAt'])
+        && isValidId(data.authorUid)
+        && isValidString(data.authorName, 1, 120)
+        && data.type in ['hello', 'icebreaker']
+        && isValidString(data.targetName, 0, 120)
+        && isValidString(data.message, 1, 400)
+        && data.isSample is bool
+        && data.createdAt is timestamp;
+    }
+
+    function isValidCurriculumMap(data) {
+      return data.keys().hasAll([
+          'levelName', 'coursebook', 'units', 'learningOutcomes', 'weeklyPacing',
+          'assessments', 'gaps', 'order', 'isSample', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'levelName', 'coursebook', 'units', 'learningOutcomes', 'weeklyPacing',
+          'assessments', 'gaps', 'order', 'isSample', 'updatedAt'
+        ])
+        && isValidString(data.levelName, 1, 60)
+        && isValidString(data.coursebook, 0, 200)
+        && isValidString(data.units, 0, 1000)
+        && isValidString(data.learningOutcomes, 0, 1500)
+        && isValidString(data.weeklyPacing, 0, 1000)
+        && isValidString(data.assessments, 0, 1000)
+        && isValidString(data.gaps, 0, 1000)
+        && data.order is number && data.order >= 0 && data.order <= 100
+        && data.isSample is bool
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidCurriculumComment(data) {
+      return data.keys().hasAll(['authorUid', 'authorName', 'text', 'isSample', 'createdAt'])
+        && data.keys().hasOnly(['authorUid', 'authorName', 'text', 'isSample', 'createdAt'])
+        && isValidId(data.authorUid)
+        && isValidString(data.authorName, 1, 120)
+        && isValidString(data.text, 1, 500)
+        && data.isSample is bool
+        && data.createdAt is timestamp;
+    }
+
+    function isValidGalleryItem(data) {
+      return data.keys().hasAll(['title', 'location', 'category', 'mediaType', 'mediaUrl', 'caption', 'isSample', 'createdAt'])
+        && data.keys().hasOnly(['title', 'location', 'category', 'mediaType', 'mediaUrl', 'caption', 'isSample', 'createdAt'])
+        && isValidString(data.title, 1, 150)
+        && isValidString(data.location, 0, 100)
+        && isValidString(data.category, 1, 80)
+        && data.mediaType in ['photo', 'youtube', 'drive', 'placeholder']
+        && isValidString(data.mediaUrl, 0, 150000)
+        && isValidString(data.caption, 0, 400)
+        && data.isSample is bool
+        && data.createdAt is timestamp;
+    }
+
+    function isValidResourceItem(data) {
+      return data.keys().hasAll([
+          'title', 'level', 'skill', 'type', 'url', 'description', 'addedBy',
+          'addedByUid', 'approved', 'openCount', 'usedCount', 'thumbsUp', 'thumbsDown',
+          'isSample', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'title', 'level', 'skill', 'type', 'url', 'description', 'addedBy',
+          'addedByUid', 'approved', 'openCount', 'usedCount', 'thumbsUp', 'thumbsDown',
+          'isSample', 'createdAt', 'updatedAt'
+        ])
+        && isValidString(data.title, 1, 180)
+        && isValidString(data.level, 1, 40)
+        && isValidString(data.skill, 1, 60)
+        && isValidString(data.type, 1, 60)
+        && isValidString(data.url, 1, 600)
+        && isValidString(data.description, 0, 800)
+        && isValidString(data.addedBy, 1, 120)
+        && isValidId(data.addedByUid)
+        && data.approved is bool
+        && data.openCount is number && data.openCount >= 0
+        && data.usedCount is number && data.usedCount >= 0
+        && data.thumbsUp is number && data.thumbsUp >= 0
+        && data.thumbsDown is number && data.thumbsDown >= 0
+        && data.isSample is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidTeacherResourceState(data) {
+      return data.keys().hasAll([
+          'uid', 'resourceId', 'bookmarked', 'used', 'rating', 'ratingComment',
+          'personalNote', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'uid', 'resourceId', 'bookmarked', 'used', 'rating', 'ratingComment',
+          'personalNote', 'lastOpenedAt', 'updatedAt'
+        ])
+        && isValidId(data.uid)
+        && isValidId(data.resourceId)
+        && data.bookmarked is bool
+        && data.used is bool
+        && data.rating in ['up', 'down', '']
+        && isValidString(data.ratingComment, 0, 400)
+        && isValidString(data.personalNote, 0, 1000)
+        && (!('lastOpenedAt' in data) || data.lastOpenedAt is timestamp)
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidTrainingSession(data) {
+      return data.keys().hasAll([
+          'title', 'month', 'dateTimeIso', 'durationMins', 'presenter', 'topic',
+          'zoomLink', 'materialsUrl', 'recordingUrl', 'tryThisWeek', 'status',
+          'isSample', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'title', 'month', 'dateTimeIso', 'durationMins', 'presenter', 'topic',
+          'zoomLink', 'materialsUrl', 'recordingUrl', 'tryThisWeek', 'status',
+          'isSample', 'createdAt', 'updatedAt'
+        ])
+        && isValidString(data.title, 1, 180)
+        && data.month is number && data.month >= 1 && data.month <= 6
+        && isValidString(data.dateTimeIso, 1, 60)
+        && data.durationMins is number && data.durationMins >= 5 && data.durationMins <= 480
+        && isValidString(data.presenter, 1, 120)
+        && isValidString(data.topic, 1, 200)
+        && isValidString(data.zoomLink, 0, 500)
+        && isValidString(data.materialsUrl, 0, 500)
+        && isValidString(data.recordingUrl, 0, 500)
+        && isValidString(data.tryThisWeek, 0, 500)
+        && data.status in ['upcoming', 'completed']
+        && data.isSample is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidTrainingResponse(data) {
+      return data.keys().hasAll([
+          'sessionId', 'uid', 'teacherName', 'rsvp', 'feedbackUseful',
+          'feedbackClear', 'feedbackComment', 'reflection', 'isSample', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'sessionId', 'uid', 'teacherName', 'rsvp', 'feedbackUseful',
+          'feedbackClear', 'feedbackComment', 'reflection', 'isSample', 'updatedAt'
+        ])
+        && isValidId(data.sessionId)
+        && isValidId(data.uid)
+        && isValidString(data.teacherName, 1, 120)
+        && data.rsvp in ['going', 'cannot_come', '']
+        && data.feedbackUseful is number && data.feedbackUseful >= 0 && data.feedbackUseful <= 5
+        && data.feedbackClear is number && data.feedbackClear >= 0 && data.feedbackClear <= 5
+        && isValidString(data.feedbackComment, 0, 400)
+        && isValidString(data.reflection, 0, 400)
+        && data.isSample is bool
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidOneToOneSlot(data) {
+      return data.keys().hasAll([
+          'dateTimeIso', 'durationMins', 'label', 'bookedByUid', 'bookedByName',
+          'notes', 'isSample', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'dateTimeIso', 'durationMins', 'label', 'bookedByUid', 'bookedByName',
+          'notes', 'isSample', 'createdAt', 'updatedAt'
+        ])
+        && isValidString(data.dateTimeIso, 1, 60)
+        && data.durationMins is number && data.durationMins >= 5 && data.durationMins <= 120
+        && isValidString(data.label, 1, 120)
+        && isValidString(data.bookedByUid, 0, 128)
+        && isValidString(data.bookedByName, 0, 120)
+        && isValidString(data.notes, 0, 300)
+        && data.isSample is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidObservation(data) {
+      return data.keys().hasAll([
+          'teacherUid', 'teacherEmailKey', 'teacherName', 'levelClass', 'plannedDateIso',
+          'status', 'purposeNote', 'whatWorked', 'actions', 'supportAgreed', 'reviewDate',
+          'teacherReply', 'isSample', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'teacherUid', 'teacherEmailKey', 'teacherName', 'levelClass', 'plannedDateIso',
+          'status', 'purposeNote', 'whatWorked', 'actions', 'supportAgreed', 'reviewDate',
+          'teacherReply', 'isSample', 'createdAt', 'updatedAt'
+        ])
+        && isValidString(data.teacherUid, 0, 128)
+        && isValidId(data.teacherEmailKey)
+        && isValidString(data.teacherName, 1, 120)
+        && isValidString(data.levelClass, 1, 100)
+        && isValidString(data.plannedDateIso, 1, 60)
+        && data.status in ['scheduled', 'observed', 'feedback_shared', 'completed']
+        && isValidString(data.purposeNote, 0, 300)
+        && isValidString(data.whatWorked, 0, 1500)
+        && isValidStringList(data.actions, 3)
+        && isValidString(data.supportAgreed, 0, 800)
+        && isValidString(data.reviewDate, 0, 60)
+        && isValidString(data.teacherReply, 0, 1500)
+        && data.isSample is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidNeedsSurvey(data) {
+      return data.keys().hasAll([
+          'uid', 'teacherName', 'helpTopics', 'feedbackStyle', 'bestTimes', 'ideas',
+          'isSample', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'uid', 'teacherName', 'helpTopics', 'feedbackStyle', 'bestTimes', 'ideas',
+          'isSample', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.uid)
+        && isValidString(data.teacherName, 1, 120)
+        && isValidStringList(data.helpTopics, 12)
+        && isValidString(data.feedbackStyle, 0, 200)
+        && isValidString(data.bestTimes, 0, 200)
+        && isValidString(data.ideas, 0, 1000)
+        && data.isSample is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidFaqItem(data) {
+      return data.keys().hasAll([
+          'question', 'level', 'category', 'explanation', 'example', 'checkingQuestion',
+          'askedByUid', 'askedByName', 'answeredBy', 'status', 'isSample', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'question', 'level', 'category', 'explanation', 'example', 'checkingQuestion',
+          'askedByUid', 'askedByName', 'answeredBy', 'status', 'isSample', 'createdAt', 'updatedAt'
+        ])
+        && isValidString(data.question, 3, 400)
+        && isValidString(data.level, 1, 40)
+        && isValidString(data.category, 1, 60)
+        && isValidString(data.explanation, 0, 1200)
+        && isValidString(data.example, 0, 600)
+        && isValidString(data.checkingQuestion, 0, 400)
+        && isValidId(data.askedByUid)
+        && isValidString(data.askedByName, 1, 120)
+        && isValidString(data.answeredBy, 0, 120)
+        && data.status in ['open', 'answered']
+        && data.isSample is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidSuggestion(data) {
+      return data.keys().hasAll(['category', 'message', 'isSample', 'createdAt'])
+        && data.keys().hasOnly(['category', 'message', 'isSample', 'createdAt'])
+        && isValidString(data.category, 1, 80)
+        && isValidString(data.message, 1, 1000)
+        && data.isSample is bool
+        && data.createdAt is timestamp;
+    }
+
+    function isValidSyllabusEntry(data) {
+      return data.keys().hasAll([
+          'teacherUid', 'teacherName', 'updatedByName', 'levelName', 'className',
+          'weekLabel', 'plannedUnit', 'completedUnit', 'status', 'materialsGap',
+          'isSample', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'teacherUid', 'teacherName', 'updatedByName', 'levelName', 'className',
+          'weekLabel', 'plannedUnit', 'completedUnit', 'status', 'materialsGap',
+          'isSample', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.teacherUid)
+        && isValidString(data.teacherName, 1, 120)
+        && isValidString(data.updatedByName, 1, 120)
+        && isValidString(data.levelName, 1, 60)
+        && isValidString(data.className, 1, 120)
+        && isValidString(data.weekLabel, 1, 60)
+        && isValidString(data.plannedUnit, 1, 200)
+        && isValidString(data.completedUnit, 0, 200)
+        && data.status in ['on_track', 'slightly_behind', 'needs_materials', 'completed']
+        && isValidString(data.materialsGap, 0, 500)
+        && data.isSample is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    // =========================================================================
+    // Collection Match Blocks (All 15 Collections Secured)
+    // =========================================================================
+
+    // 1. Allowlist (Contains PII: email — strictly isolated)
+    match /allowlist/{entryId} {
+      allow get: if isVerified() && isValidId(entryId) && (entryId == myEmailKey() || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isAdmin() && isValidId(entryId)
+        && isValidAllowlistEntry(incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isAdmin() && isValidId(entryId)
+        && isValidAllowlistEntry(incoming())
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+      allow delete: if isAdmin() && isValidId(entryId);
+    }
+
+    // 2. Teacher Directory Profiles (Zero PII — shared across allowlisted YAO teachers)
+    match /teachers/{uid} {
+      allow get: if isAllowedUser() && isValidId(uid);
+      allow list: if isAllowedUser();
+      allow create: if isAllowedUser() && isValidId(uid)
+        && isValidTeacherProfile(incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && (isAdmin() || (uid == request.auth.uid && incoming().uid == request.auth.uid && incoming().isSample == false));
+      allow update: if isAllowedUser() && isValidId(uid)
+        && isValidTeacherProfile(incoming())
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin()
+          || (
+            uid == request.auth.uid
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'displayName', 'photoUrl', 'levels', 'classesTaught', 'languages',
+              'yearsTeaching', 'goodAt', 'wantHelpWith', 'funFact', 'favouriteActivity',
+              'onboardingComplete', 'checklist', 'updatedAt'
+            ])
+          )
+        );
+      allow delete: if isAdmin() && isValidId(uid);
+    }
+
+    // 3. Hub Configuration (Pinned message, spotlight, icebreaker, progress)
+    match /hubConfig/{configId} {
+      allow get: if isAllowedUser() && isValidId(configId);
+      allow list: if isAllowedUser();
+      allow create: if isAdmin() && isValidId(configId)
+        && isValidHubConfig(incoming())
+        && incoming().updatedAt == request.time;
+      allow update: if isAdmin() && isValidId(configId)
+        && isValidHubConfig(incoming())
+        && incoming().updatedAt == request.time;
+      allow delete: if isAdmin() && isValidId(configId);
+    }
+
+    // 4. Home Hello Feed & Weekly Icebreaker Answers
+    match /helloFeed/{postId} {
+      allow get: if isAllowedUser() && isValidId(postId);
+      allow list: if isAllowedUser();
+      allow create: if isAllowedUser() && isValidId(postId)
+        && isValidHelloPost(incoming())
+        && incoming().createdAt == request.time
+        && (isAdmin() || (incoming().authorUid == request.auth.uid && incoming().isSample == false));
+      allow update: if false;
+      allow delete: if isAllowedUser() && isValidId(postId)
+        && (isAdmin() || existing().authorUid == request.auth.uid);
+    }
+
+    // 5. Curriculum Maps & Comments (Master Gate on subcollection)
+    match /curriculumMaps/{levelId} {
+      allow get: if isAllowedUser() && isValidId(levelId);
+      allow list: if isAllowedUser();
+      allow create: if isAdmin() && isValidId(levelId)
+        && isValidCurriculumMap(incoming())
+        && incoming().updatedAt == request.time;
+      allow update: if isAdmin() && isValidId(levelId)
+        && isValidCurriculumMap(incoming())
+        && incoming().updatedAt == request.time;
+      allow delete: if isAdmin() && isValidId(levelId);
+
+      match /comments/{commentId} {
+        allow get: if isAllowedUser() && isValidId(levelId) && isValidId(commentId)
+          && exists(/databases/$(database)/documents/curriculumMaps/$(levelId));
+        allow list: if isAllowedUser();
+        allow create: if isAllowedUser() && isValidId(levelId) && isValidId(commentId)
+          && isValidCurriculumComment(incoming())
+          && incoming().createdAt == request.time
+          && exists(/databases/$(database)/documents/curriculumMaps/$(levelId))
+          && (isAdmin() || (incoming().authorUid == request.auth.uid && incoming().isSample == false));
+        allow update: if false;
+        allow delete: if isAllowedUser() && isValidId(levelId) && isValidId(commentId)
+          && exists(/databases/$(database)/documents/curriculumMaps/$(levelId))
+          && (isAdmin() || existing().authorUid == request.auth.uid);
+      }
+    }
+
+    // 6. Teaching in Action Gallery
+    match /galleryItems/{itemId} {
+      allow get: if isAllowedUser() && isValidId(itemId);
+      allow list: if isAllowedUser();
+      allow create: if isAdmin() && isValidId(itemId)
+        && isValidGalleryItem(incoming())
+        && incoming().createdAt == request.time;
+      allow update: if isAdmin() && isValidId(itemId)
+        && isValidGalleryItem(incoming())
+        && incoming().createdAt == existing().createdAt;
+      allow delete: if isAdmin() && isValidId(itemId);
+    }
+
+    // 7. Resource Library
+    match /resources/{resourceId} {
+      allow get: if isAllowedUser() && isValidId(resourceId)
+        && (isAdmin() || existing().approved == true || existing().addedByUid == request.auth.uid);
+      allow list: if isAdmin()
+        || (isAllowedUser() && (resource.data.approved == true || resource.data.addedByUid == request.auth.uid));
+      allow create: if isAllowedUser() && isValidId(resourceId)
+        && isValidResourceItem(incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin()
+          || (
+            incoming().addedByUid == request.auth.uid
+            && incoming().approved == false
+            && incoming().isSample == false
+            && incoming().openCount == 0
+            && incoming().usedCount == 0
+            && incoming().thumbsUp == 0
+            && incoming().thumbsDown == 0
+          )
+        );
+      allow update: if isAllowedUser() && isValidId(resourceId)
+        && isValidResourceItem(incoming())
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin()
+          || (
+            existing().approved == true
+            && incoming().diff(existing()).affectedKeys().hasOnly(['openCount', 'usedCount', 'thumbsUp', 'thumbsDown', 'updatedAt'])
+          )
+        );
+      allow delete: if isAdmin() && isValidId(resourceId);
+    }
+
+    // 8. Personal Teacher Resource States (Private bookmarks, ratings, notes)
+    match /teacherResourceStates/{stateId} {
+      allow get: if isAllowedUser() && isValidId(stateId)
+        && (isAdmin() || existing().uid == request.auth.uid);
+      allow list: if isAdmin() || (isAllowedUser() && resource.data.uid == request.auth.uid);
+      allow create: if isAllowedUser() && isValidId(stateId)
+        && isValidTeacherResourceState(incoming())
+        && incoming().uid == request.auth.uid
+        && stateId == request.auth.uid + '_' + incoming().resourceId
+        && incoming().updatedAt == request.time;
+      allow update: if isAllowedUser() && isValidId(stateId)
+        && isValidTeacherResourceState(incoming())
+        && incoming().uid == existing().uid
+        && incoming().resourceId == existing().resourceId
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin()
+          || (
+            existing().uid == request.auth.uid
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'bookmarked', 'used', 'rating', 'ratingComment', 'personalNote', 'lastOpenedAt', 'updatedAt'
+            ])
+          )
+        );
+      allow delete: if isAllowedUser() && isValidId(stateId)
+        && (isAdmin() || existing().uid == request.auth.uid);
+    }
+
+    // 9. Training Sessions
+    match /trainingSessions/{sessionId} {
+      allow get: if isAllowedUser() && isValidId(sessionId);
+      allow list: if isAllowedUser();
+      allow create: if isAdmin() && isValidId(sessionId)
+        && isValidTrainingSession(incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isAdmin() && isValidId(sessionId)
+        && isValidTrainingSession(incoming())
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+      allow delete: if isAdmin() && isValidId(sessionId);
+    }
+
+    // 10. Training Responses (RSVP, 3-question feedback, one-line reflection)
+    match /trainingResponses/{responseId} {
+      allow get: if isAllowedUser() && isValidId(responseId);
+      allow list: if isAllowedUser();
+      allow create: if isAllowedUser() && isValidId(responseId)
+        && isValidTrainingResponse(incoming())
+        && incoming().updatedAt == request.time
+        && exists(/databases/$(database)/documents/trainingSessions/$(incoming().sessionId))
+        && (
+          isAdmin()
+          || (
+            incoming().uid == request.auth.uid
+            && responseId == incoming().sessionId + '_' + request.auth.uid
+            && incoming().isSample == false
+          )
+        );
+      allow update: if isAllowedUser() && isValidId(responseId)
+        && isValidTrainingResponse(incoming())
+        && incoming().sessionId == existing().sessionId
+        && incoming().uid == existing().uid
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin()
+          || (
+            existing().uid == request.auth.uid
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'teacherName', 'rsvp', 'feedbackUseful', 'feedbackClear', 'feedbackComment', 'reflection', 'updatedAt'
+            ])
+          )
+        );
+      allow delete: if isAdmin() && isValidId(responseId);
+    }
+
+    // 11. One-to-One Meeting Slots
+    match /oneToOneSlots/{slotId} {
+      allow get: if isAllowedUser() && isValidId(slotId);
+      allow list: if isAllowedUser();
+      allow create: if isAdmin() && isValidId(slotId)
+        && isValidOneToOneSlot(incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isAllowedUser() && isValidId(slotId)
+        && isValidOneToOneSlot(incoming())
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin()
+          || (
+            // Action: Book an available slot
+            existing().bookedByUid == ''
+            && incoming().bookedByUid == request.auth.uid
+            && incoming().diff(existing()).affectedKeys().hasOnly(['bookedByUid', 'bookedByName', 'notes', 'updatedAt'])
+          )
+          || (
+            // Action: Cancel own booking
+            existing().bookedByUid == request.auth.uid
+            && incoming().bookedByUid == ''
+            && incoming().bookedByName == ''
+            && incoming().notes == ''
+            && incoming().diff(existing()).affectedKeys().hasOnly(['bookedByUid', 'bookedByName', 'notes', 'updatedAt'])
+          )
+        );
+      allow delete: if isAdmin() && isValidId(slotId);
+    }
+
+    // 12. Private Observations & Feedback (Strictly owner teacher + Admins ONLY)
+    match /observations/{obsId} {
+      allow get: if isValidId(obsId) && (
+        isAdmin()
+        || (
+          isAllowedUser()
+          && (existing().teacherUid == request.auth.uid || existing().teacherEmailKey == myEmailKey())
+        )
+      );
+      allow list: if isAdmin()
+        || (
+          isAllowedUser()
+          && (resource.data.teacherUid == request.auth.uid || resource.data.teacherEmailKey == myEmailKey())
+        );
+      allow create: if isAdmin() && isValidId(obsId)
+        && isValidObservation(incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(obsId)
+        && isValidObservation(incoming())
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin()
+          || (
+            isAllowedUser()
+            && existing().status != 'completed'
+            && (existing().teacherUid == request.auth.uid || existing().teacherEmailKey == myEmailKey())
+            && incoming().diff(existing()).affectedKeys().hasOnly(['teacherReply', 'updatedAt'])
+          )
+        );
+      allow delete: if isAdmin() && isValidId(obsId);
+    }
+
+    // 13. Month 1 Needs Survey (Owner + Admins)
+    match /needsSurveys/{uid} {
+      allow get: if isValidId(uid) && (isAdmin() || (isAllowedUser() && uid == request.auth.uid));
+      allow list: if isAdmin() || (isAllowedUser() && resource.data.uid == request.auth.uid);
+      allow create: if isAllowedUser() && isValidId(uid)
+        && isValidNeedsSurvey(incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && (isAdmin() || (uid == request.auth.uid && incoming().uid == request.auth.uid && incoming().isSample == false));
+      allow update: if isAllowedUser() && isValidId(uid)
+        && isValidNeedsSurvey(incoming())
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin()
+          || (
+            uid == request.auth.uid
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'teacherName', 'helpTopics', 'feedbackStyle', 'bestTimes', 'ideas', 'updatedAt'
+            ])
+          )
+        );
+      allow delete: if isAdmin() && isValidId(uid);
+    }
+
+    // 14. Shared FAQ (Hard Student Questions)
+    match /faqs/{faqId} {
+      allow get: if isAllowedUser() && isValidId(faqId);
+      allow list: if isAllowedUser();
+      allow create: if isAllowedUser() && isValidId(faqId)
+        && isValidFaqItem(incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && (isAdmin() || (incoming().askedByUid == request.auth.uid && incoming().isSample == false));
+      allow update: if isAllowedUser() && isValidId(faqId)
+        && isValidFaqItem(incoming())
+        && incoming().askedByUid == existing().askedByUid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin()
+          || (
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'explanation', 'example', 'checkingQuestion', 'answeredBy', 'status', 'updatedAt'
+            ])
+          )
+        );
+      allow delete: if isAdmin() && isValidId(faqId);
+    }
+
+    // 15. Anonymous Suggestion Box (Teachers create, Admins read/delete)
+    match /suggestions/{suggestionId} {
+      allow get: if isAdmin() && isValidId(suggestionId);
+      allow list: if isAdmin();
+      allow create: if isAllowedUser() && isValidId(suggestionId)
+        && isValidSuggestion(incoming())
+        && incoming().createdAt == request.time
+        && (isAdmin() || incoming().isSample == false);
+      allow update: if false;
+      allow delete: if isAdmin() && isValidId(suggestionId);
+    }
+
+    // 16. Live Weekly Syllabus Tracker (Shared visibility; teachers manage own rows, admins manage all)
+    match /syllabusEntries/{entryId} {
+      allow get: if isAllowedUser() && isValidId(entryId);
+      allow list: if isAllowedUser();
+      allow create: if isAllowedUser() && isValidId(entryId)
+        && isValidSyllabusEntry(incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && (isAdmin() || (incoming().teacherUid == request.auth.uid && incoming().isSample == false));
+      allow update: if isAllowedUser() && isValidId(entryId)
+        && isValidSyllabusEntry(incoming())
+        && incoming().teacherUid == existing().teacherUid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin()
+          || (
+            existing().teacherUid == request.auth.uid
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'levelName', 'className', 'weekLabel', 'plannedUnit', 'completedUnit',
+              'status', 'materialsGap', 'updatedByName', 'updatedAt'
+            ])
+          )
+        );
+      allow delete: if isAllowedUser() && isValidId(entryId)
+        && (isAdmin() || existing().teacherUid == request.auth.uid);
+    }
+  }
+}

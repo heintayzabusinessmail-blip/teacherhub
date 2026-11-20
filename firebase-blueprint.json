@@ -1,0 +1,518 @@
+{
+  "entities": {
+    "AllowlistEntry": {
+      "title": "AllowlistEntry",
+      "description": "Authorized YAO English teacher or admin email entry controlling app entry and RBAC role.",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "maxLength": 200 },
+        "role": { "type": "string", "enum": ["admin", "teacher"] },
+        "displayName": { "type": "string", "maxLength": 120 },
+        "addedBy": { "type": "string", "maxLength": 128 },
+        "isSample": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["email", "role", "displayName", "addedBy", "isSample", "createdAt", "updatedAt"]
+    },
+    "TeacherProfile": {
+      "title": "TeacherProfile",
+      "description": "Public (within YAO team) teacher profile card and Month 1 checklist. Contains zero PII (no email, phone, pay, or student data).",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "displayName": { "type": "string", "maxLength": 120 },
+        "photoUrl": { "type": "string", "maxLength": 150000 },
+        "levels": { "type": "array" },
+        "classesTaught": { "type": "string", "maxLength": 200 },
+        "languages": { "type": "string", "maxLength": 200 },
+        "yearsTeaching": { "type": "number" },
+        "goodAt": { "type": "string", "maxLength": 300 },
+        "wantHelpWith": { "type": "string", "maxLength": 300 },
+        "funFact": { "type": "string", "maxLength": 300 },
+        "favouriteActivity": { "type": "string", "maxLength": 300 },
+        "onboardingComplete": { "type": "boolean" },
+        "checklist": { "type": "object" },
+        "isSample": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "uid",
+        "displayName",
+        "photoUrl",
+        "levels",
+        "classesTaught",
+        "languages",
+        "yearsTeaching",
+        "goodAt",
+        "wantHelpWith",
+        "funFact",
+        "favouriteActivity",
+        "onboardingComplete",
+        "checklist",
+        "isSample",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "HubConfig": {
+      "title": "HubConfig",
+      "description": "Shared hub settings managed by admins (pinned message, teacher spotlight, icebreaker question, Month 1 progress).",
+      "type": "object",
+      "properties": {
+        "kind": { "type": "string", "enum": ["pinned", "spotlight", "icebreaker", "progress"] },
+        "title": { "type": "string", "maxLength": 180 },
+        "body": { "type": "string", "maxLength": 1200 },
+        "teacherUid": { "type": "string", "maxLength": 128 },
+        "teacherName": { "type": "string", "maxLength": 120 },
+        "percent": { "type": "number" },
+        "updatedBy": { "type": "string", "maxLength": 120 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["kind", "title", "body", "updatedBy", "updatedAt"]
+    },
+    "HelloPost": {
+      "title": "HelloPost",
+      "description": "Short friendly greeting or weekly icebreaker answer displayed on the Home feed.",
+      "type": "object",
+      "properties": {
+        "authorUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "authorName": { "type": "string", "maxLength": 120 },
+        "type": { "type": "string", "enum": ["hello", "icebreaker"] },
+        "targetName": { "type": "string", "maxLength": 120 },
+        "message": { "type": "string", "maxLength": 400 },
+        "isSample": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["authorUid", "authorName", "type", "targetName", "message", "isSample", "createdAt"]
+    },
+    "CurriculumMap": {
+      "title": "CurriculumMap",
+      "description": "Month 1 curriculum mapping record for each YAO English level.",
+      "type": "object",
+      "properties": {
+        "levelName": { "type": "string", "maxLength": 60 },
+        "coursebook": { "type": "string", "maxLength": 200 },
+        "units": { "type": "string", "maxLength": 1000 },
+        "learningOutcomes": { "type": "string", "maxLength": 1500 },
+        "weeklyPacing": { "type": "string", "maxLength": 1000 },
+        "assessments": { "type": "string", "maxLength": 1000 },
+        "gaps": { "type": "string", "maxLength": 1000 },
+        "order": { "type": "number" },
+        "isSample": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "levelName",
+        "coursebook",
+        "units",
+        "learningOutcomes",
+        "weeklyPacing",
+        "assessments",
+        "gaps",
+        "order",
+        "isSample",
+        "updatedAt"
+      ]
+    },
+    "CurriculumComment": {
+      "title": "CurriculumComment",
+      "description": "Teacher comment on a level's curriculum map.",
+      "type": "object",
+      "properties": {
+        "authorUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "authorName": { "type": "string", "maxLength": 120 },
+        "text": { "type": "string", "maxLength": 500 },
+        "isSample": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["authorUid", "authorName", "text", "isSample", "createdAt"]
+    },
+    "GalleryItem": {
+      "title": "GalleryItem",
+      "description": "Teaching in action photo or video link managed by admin.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "maxLength": 150 },
+        "location": { "type": "string", "maxLength": 100 },
+        "category": { "type": "string", "maxLength": 80 },
+        "mediaType": { "type": "string", "enum": ["photo", "youtube", "drive", "placeholder"] },
+        "mediaUrl": { "type": "string", "maxLength": 150000 },
+        "caption": { "type": "string", "maxLength": 400 },
+        "isSample": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "location", "category", "mediaType", "mediaUrl", "caption", "isSample", "createdAt"]
+    },
+    "ResourceItem": {
+      "title": "ResourceItem",
+      "description": "Digital teaching resource or teacher-suggested resource in the Resource Library.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "maxLength": 180 },
+        "level": { "type": "string", "maxLength": 40 },
+        "skill": { "type": "string", "maxLength": 60 },
+        "type": { "type": "string", "maxLength": 60 },
+        "url": { "type": "string", "maxLength": 600 },
+        "description": { "type": "string", "maxLength": 800 },
+        "addedBy": { "type": "string", "maxLength": 120 },
+        "addedByUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "approved": { "type": "boolean" },
+        "openCount": { "type": "number" },
+        "usedCount": { "type": "number" },
+        "thumbsUp": { "type": "number" },
+        "thumbsDown": { "type": "number" },
+        "isSample": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "title",
+        "level",
+        "skill",
+        "type",
+        "url",
+        "description",
+        "addedBy",
+        "addedByUid",
+        "approved",
+        "openCount",
+        "usedCount",
+        "thumbsUp",
+        "thumbsDown",
+        "isSample",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "TeacherResourceState": {
+      "title": "TeacherResourceState",
+      "description": "Per-teacher personal bookmark, recently opened timestamp, rating, and private note for a resource.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "resourceId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "bookmarked": { "type": "boolean" },
+        "used": { "type": "boolean" },
+        "rating": { "type": "string", "enum": ["up", "down", ""] },
+        "ratingComment": { "type": "string", "maxLength": 400 },
+        "personalNote": { "type": "string", "maxLength": 1000 },
+        "lastOpenedAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "resourceId", "bookmarked", "used", "rating", "ratingComment", "personalNote", "updatedAt"]
+    },
+    "TrainingSession": {
+      "title": "TrainingSession",
+      "description": "Scheduled teacher training session across Months 1 to 6.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "maxLength": 180 },
+        "month": { "type": "number" },
+        "dateTimeIso": { "type": "string", "maxLength": 60 },
+        "durationMins": { "type": "number" },
+        "presenter": { "type": "string", "maxLength": 120 },
+        "topic": { "type": "string", "maxLength": 200 },
+        "zoomLink": { "type": "string", "maxLength": 500 },
+        "materialsUrl": { "type": "string", "maxLength": 500 },
+        "recordingUrl": { "type": "string", "maxLength": 500 },
+        "tryThisWeek": { "type": "string", "maxLength": 500 },
+        "status": { "type": "string", "enum": ["upcoming", "completed"] },
+        "isSample": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "title",
+        "month",
+        "dateTimeIso",
+        "durationMins",
+        "presenter",
+        "topic",
+        "zoomLink",
+        "materialsUrl",
+        "recordingUrl",
+        "tryThisWeek",
+        "status",
+        "isSample",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "TrainingResponse": {
+      "title": "TrainingResponse",
+      "description": "Teacher RSVP, 3-question post-session feedback, and one-line reflection for a training session.",
+      "type": "object",
+      "properties": {
+        "sessionId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "uid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "teacherName": { "type": "string", "maxLength": 120 },
+        "rsvp": { "type": "string", "enum": ["going", "cannot_come", ""] },
+        "feedbackUseful": { "type": "number" },
+        "feedbackClear": { "type": "number" },
+        "feedbackComment": { "type": "string", "maxLength": 400 },
+        "reflection": { "type": "string", "maxLength": 400 },
+        "isSample": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "sessionId",
+        "uid",
+        "teacherName",
+        "rsvp",
+        "feedbackUseful",
+        "feedbackClear",
+        "feedbackComment",
+        "reflection",
+        "isSample",
+        "updatedAt"
+      ]
+    },
+    "OneToOneSlot": {
+      "title": "OneToOneSlot",
+      "description": "Bookable 15-20 minute one-to-one welcome meeting slot set by admin.",
+      "type": "object",
+      "properties": {
+        "dateTimeIso": { "type": "string", "maxLength": 60 },
+        "durationMins": { "type": "number" },
+        "label": { "type": "string", "maxLength": 120 },
+        "bookedByUid": { "type": "string", "maxLength": 128 },
+        "bookedByName": { "type": "string", "maxLength": 120 },
+        "notes": { "type": "string", "maxLength": 300 },
+        "isSample": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "dateTimeIso",
+        "durationMins",
+        "label",
+        "bookedByUid",
+        "bookedByName",
+        "notes",
+        "isSample",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Observation": {
+      "title": "Observation",
+      "description": "Private class observation schedule and developmental feedback. Strictly visible only to that teacher, Tr Hein, and the Founder.",
+      "type": "object",
+      "properties": {
+        "teacherUid": { "type": "string", "maxLength": 128 },
+        "teacherEmailKey": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "teacherName": { "type": "string", "maxLength": 120 },
+        "levelClass": { "type": "string", "maxLength": 100 },
+        "plannedDateIso": { "type": "string", "maxLength": 60 },
+        "status": { "type": "string", "enum": ["scheduled", "observed", "feedback_shared", "completed"] },
+        "purposeNote": { "type": "string", "maxLength": 300 },
+        "whatWorked": { "type": "string", "maxLength": 1500 },
+        "actions": { "type": "array" },
+        "supportAgreed": { "type": "string", "maxLength": 800 },
+        "reviewDate": { "type": "string", "maxLength": 60 },
+        "teacherReply": { "type": "string", "maxLength": 1500 },
+        "isSample": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "teacherUid",
+        "teacherEmailKey",
+        "teacherName",
+        "levelClass",
+        "plannedDateIso",
+        "status",
+        "purposeNote",
+        "whatWorked",
+        "actions",
+        "supportAgreed",
+        "reviewDate",
+        "teacherReply",
+        "isSample",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "NeedsSurvey": {
+      "title": "NeedsSurvey",
+      "description": "Month 1 Teacher Needs Survey response owned by each teacher.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "teacherName": { "type": "string", "maxLength": 120 },
+        "helpTopics": { "type": "array" },
+        "feedbackStyle": { "type": "string", "maxLength": 200 },
+        "bestTimes": { "type": "string", "maxLength": 200 },
+        "ideas": { "type": "string", "maxLength": 1000 },
+        "isSample": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "uid",
+        "teacherName",
+        "helpTopics",
+        "feedbackStyle",
+        "bestTimes",
+        "ideas",
+        "isSample",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "FaqItem": {
+      "title": "FaqItem",
+      "description": "Shared teacher FAQ for hard student questions with explanation, example, and checking question.",
+      "type": "object",
+      "properties": {
+        "question": { "type": "string", "maxLength": 400 },
+        "level": { "type": "string", "maxLength": 40 },
+        "category": { "type": "string", "maxLength": 60 },
+        "explanation": { "type": "string", "maxLength": 1200 },
+        "example": { "type": "string", "maxLength": 600 },
+        "checkingQuestion": { "type": "string", "maxLength": 400 },
+        "askedByUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "askedByName": { "type": "string", "maxLength": 120 },
+        "answeredBy": { "type": "string", "maxLength": 120 },
+        "status": { "type": "string", "enum": ["open", "answered"] },
+        "isSample": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "question",
+        "level",
+        "category",
+        "explanation",
+        "example",
+        "checkingQuestion",
+        "askedByUid",
+        "askedByName",
+        "answeredBy",
+        "status",
+        "isSample",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "AnonymousSuggestion": {
+      "title": "AnonymousSuggestion",
+      "description": "Anonymous suggestion submitted by an allowlisted teacher; readable only by admins.",
+      "type": "object",
+      "properties": {
+        "category": { "type": "string", "maxLength": 80 },
+        "message": { "type": "string", "maxLength": 1000 },
+        "isSample": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["category", "message", "isSample", "createdAt"]
+    },
+    "SyllabusEntry": {
+      "title": "SyllabusEntry",
+      "description": "Live weekly syllabus progress entry per class with optional materials gap flag for Tr Hein.",
+      "type": "object",
+      "properties": {
+        "teacherUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "teacherName": { "type": "string", "maxLength": 120 },
+        "updatedByName": { "type": "string", "maxLength": 120 },
+        "levelName": { "type": "string", "maxLength": 60 },
+        "className": { "type": "string", "maxLength": 120 },
+        "weekLabel": { "type": "string", "maxLength": 60 },
+        "plannedUnit": { "type": "string", "maxLength": 200 },
+        "completedUnit": { "type": "string", "maxLength": 200 },
+        "status": { "type": "string", "enum": ["on_track", "slightly_behind", "needs_materials", "completed"] },
+        "materialsGap": { "type": "string", "maxLength": 500 },
+        "isSample": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "teacherUid",
+        "teacherName",
+        "updatedByName",
+        "levelName",
+        "className",
+        "weekLabel",
+        "plannedUnit",
+        "completedUnit",
+        "status",
+        "materialsGap",
+        "isSample",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/allowlist/{entryId}": {
+      "schema": { "$ref": "#/entities/AllowlistEntry" },
+      "description": "Email allowlist and role assignment (admin vs teacher)."
+    },
+    "/teachers/{uid}": {
+      "schema": { "$ref": "#/entities/TeacherProfile" },
+      "description": "Public team directory cards and personal Month 1 checklist."
+    },
+    "/hubConfig/{configId}": {
+      "schema": { "$ref": "#/entities/HubConfig" },
+      "description": "Admin-managed pinned note, spotlight, icebreaker, and progress."
+    },
+    "/helloFeed/{postId}": {
+      "schema": { "$ref": "#/entities/HelloPost" },
+      "description": "Friendly greetings and weekly icebreaker answers."
+    },
+    "/curriculumMaps/{levelId}": {
+      "schema": { "$ref": "#/entities/CurriculumMap" },
+      "description": "Curriculum map entries per level (A2, B1, B2, One-to-One)."
+    },
+    "/curriculumMaps/{levelId}/comments/{commentId}": {
+      "schema": { "$ref": "#/entities/CurriculumComment" },
+      "description": "Teacher comments on a specific level's curriculum map."
+    },
+    "/galleryItems/{itemId}": {
+      "schema": { "$ref": "#/entities/GalleryItem" },
+      "description": "Coordinator teaching-in-action gallery photos and video links."
+    },
+    "/resources/{resourceId}": {
+      "schema": { "$ref": "#/entities/ResourceItem" },
+      "description": "Searchable Resource Library items and pending teacher suggestions."
+    },
+    "/teacherResourceStates/{stateId}": {
+      "schema": { "$ref": "#/entities/TeacherResourceState" },
+      "description": "Private teacher bookmarks, recently opened, ratings, and notes."
+    },
+    "/trainingSessions/{sessionId}": {
+      "schema": { "$ref": "#/entities/TrainingSession" },
+      "description": "Training calendar sessions and Try This Week tasks."
+    },
+    "/trainingResponses/{responseId}": {
+      "schema": { "$ref": "#/entities/TrainingResponse" },
+      "description": "Teacher RSVPs, feedback ratings, and one-line reflections."
+    },
+    "/oneToOneSlots/{slotId}": {
+      "schema": { "$ref": "#/entities/OneToOneSlot" },
+      "description": "Bookable 1-to-1 meeting slots managed by admin."
+    },
+    "/observations/{obsId}": {
+      "schema": { "$ref": "#/entities/Observation" },
+      "description": "Private class observation schedules and developmental feedback."
+    },
+    "/needsSurveys/{uid}": {
+      "schema": { "$ref": "#/entities/NeedsSurvey" },
+      "description": "Month 1 Teacher Needs Survey responses."
+    },
+    "/faqs/{faqId}": {
+      "schema": { "$ref": "#/entities/FaqItem" },
+      "description": "Shared FAQ for hard student questions."
+    },
+    "/suggestions/{suggestionId}": {
+      "schema": { "$ref": "#/entities/AnonymousSuggestion" },
+      "description": "Anonymous teacher suggestions readable only by admins."
+    },
+    "/syllabusEntries/{entryId}": {
+      "schema": { "$ref": "#/entities/SyllabusEntry" },
+      "description": "Live weekly syllabus tracker entries per class with materials gap flags."
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "YAO English Teacher Hub",
+  "description": "Academic Coordinator plan: Month 1 and the road to Month 6 — private hub for YAO English teachers.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
