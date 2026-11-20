@@ -124,7 +124,7 @@ export function PlanPage() {
   return (
     <div className="space-y-8">
       <PageHeader
-        title="The Plan: Meet Your Coordinator & My 9 Jobs"
+        title="About Me & Our Plan: Meet Your Coordinator & My 9 Jobs"
         inShort={PAGE_SUMMARIES.plan}
         action={
           <button

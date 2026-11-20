@@ -409,14 +409,16 @@ export function ResourcesPage() {
                 Bulk CSV
               </button>
             )}
-            <button
-              type="button"
-              onClick={() => openAddModal()}
-              className="min-h-[44px] inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#3B1050] hover:bg-[#4E1869] text-white text-sm font-semibold whitespace-nowrap"
-            >
-              <Plus className="w-4 h-4" />
-              {isAdmin ? 'Add resource' : 'Suggest a resource'}
-            </button>
+            {canInteract && (
+              <button
+                type="button"
+                onClick={() => openAddModal()}
+                className="min-h-[44px] inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#3B1050] hover:bg-[#4E1869] text-white text-sm font-semibold whitespace-nowrap"
+              >
+                <Plus className="w-4 h-4" />
+                {isAdmin ? 'Add resource' : 'Suggest a resource'}
+              </button>
+            )}
           </div>
         }
       />

@@ -137,7 +137,7 @@ export function AuthGate() {
           <div className="space-y-1.5">
             <h2 className="text-xl font-bold text-[#1F122B] dark:text-[#F5EEF9]">Sign In</h2>
             <p className="text-sm text-[#5A4A66] dark:text-[#BBAAC9]">
-              Sign in with any Google account to view the hub.
+              Sign in with any Google account to join the hub.
             </p>
           </div>
 
@@ -167,8 +167,8 @@ export function AuthGate() {
             </button>
 
             <p className="text-xs text-[#5A4A66] dark:text-[#BBAAC9] leading-relaxed">
-              Any Gmail account can sign in to view the hub. Only Tr Hein and approved editors can
-              make changes.
+              Any Gmail account can sign in to set up a teacher profile, submit surveys, RSVP, and
+              share feedback. Only Tr Hein and approved editors can edit hub content.
             </p>
           </div>
         </section>

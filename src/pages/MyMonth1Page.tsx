@@ -347,14 +347,16 @@ export function MyMonth1Page({ onNavigate }: MyMonth1PageProps) {
                       {formatLocalDateTime(slot.dateTimeIso)} · {slot.durationMins} mins
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    disabled={busySlotId === slot.id}
-                    onClick={() => handleBookSlot(slot.id)}
-                    className="min-h-[42px] px-4 py-2 rounded-xl bg-[#3B1050] hover:bg-[#4E1869] text-white text-xs font-semibold transition-colors disabled:opacity-50"
-                  >
-                    {busySlotId === slot.id ? 'Booking...' : 'Pick this slot'}
-                  </button>
+                  {canInteract && (
+                    <button
+                      type="button"
+                      disabled={busySlotId === slot.id}
+                      onClick={() => handleBookSlot(slot.id)}
+                      className="min-h-[42px] px-4 py-2 rounded-xl bg-[#3B1050] hover:bg-[#4E1869] text-white text-xs font-semibold transition-colors disabled:opacity-50"
+                    >
+                      {busySlotId === slot.id ? 'Booking...' : 'Pick this slot'}
+                    </button>
+                  )}
                 </div>
               ))}
             </div>

@@ -6,12 +6,18 @@ import {
   CheckCircle2,
   Database,
   Download,
+  ExternalLink,
   Eye,
+  FolderOpen,
+  GraduationCap,
+  HelpCircle,
+  MessageSquare,
   Plus,
   Shield,
   Target,
   Trash2,
   UserPlus,
+  Users,
 } from 'lucide-react';
 import {
   addDoc,
@@ -37,7 +43,14 @@ import { downloadMonth1ReportPdf } from '../utils/pdfExport';
 import { clearAllSampleData, seedFictionalSampleData } from '../utils/seedData';
 import type { ObservationDoc, UserRole } from '../types';
 
-type AdminSubTab = 'overview' | 'allowlist' | 'slots' | 'observations' | 'surveys' | 'report';
+type AdminSubTab =
+  | 'overview'
+  | 'submissions'
+  | 'allowlist'
+  | 'slots'
+  | 'observations'
+  | 'surveys'
+  | 'report';
 
 export function AdminPage() {
   const {
@@ -47,6 +60,7 @@ export function AdminPage() {
     myProfile,
     allowlist,
     teachers,
+    helloFeed,
     resources,
     allResourceStates,
     trainingSessions,
@@ -65,7 +79,7 @@ export function AdminPage() {
   // Allowlist form
   const [newEmail, setNewEmail] = useState('');
   const [newName, setNewName] = useState('');
-  const [newRole, setNewRole] = useState<UserRole>('admin');
+  const [newRole, setNewRole] = useState<UserRole>('teacher');
   const [savingAllow, setSavingAllow] = useState(false);
 
   // 1-to-1 Slot form
@@ -112,6 +126,24 @@ export function AdminPage() {
       ),
     [syllabusEntries]
   );
+
+  const pendingResources = useMemo(
+    () => resources.filter((r) => !r.approved),
+    [resources]
+  );
+
+  const resourceRatingComments = useMemo(
+    () => allResourceStates.filter((s) => s.ratingComment && s.ratingComment.trim().length > 0),
+    [allResourceStates]
+  );
+
+  const totalSubmissionsCount =
+    teachers.length +
+    trainingResponses.length +
+    faqs.length +
+    pendingResources.length +
+    syllabusEntries.length +
+    helloFeed.length;
 
   const resourceStats = useMemo(() => {
     const bookmarkCounts: Record<string, number> = {};
@@ -168,7 +200,7 @@ export function AdminPage() {
       });
       setNewEmail('');
       setNewName('');
-      setNewRole('admin');
+      setNewRole('teacher');
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, 'allowlist');
     } finally {
@@ -334,6 +366,25 @@ export function AdminPage() {
     }
   };
 
+  const handleApproveResource = async (resourceId: string) => {
+    try {
+      await updateDoc(doc(db, 'resources', resourceId), {
+        approved: true,
+        updatedAt: serverTimestamp(),
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `resources/${resourceId}`);
+    }
+  };
+
+  const handleDeleteResource = async (resourceId: string) => {
+    try {
+      await deleteDoc(doc(db, 'resources', resourceId));
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `resources/${resourceId}`);
+    }
+  };
+
   const answeredFaqCount = faqs.filter((f) => f.status === 'answered').length;
   const bookedSlotsCount = oneToOneSlots.filter((s) => Boolean(s.bookedByUid)).length;
   const obsCompletedCount = observations.filter((o) => o.status !== 'scheduled').length;
@@ -381,10 +432,11 @@ export function AdminPage() {
         {(
           [
             { id: 'overview', label: 'Progress & Targets' },
-            { id: 'allowlist', label: `Allowlist & Roles (${allowlist.length})` },
+            { id: 'submissions', label: `Teacher Submissions (${totalSubmissionsCount})` },
+            { id: 'surveys', label: `Surveys (${allSurveys.length}) & Box (${suggestions.length})` },
             { id: 'slots', label: `1-to-1 Slots (${oneToOneSlots.length})` },
             { id: 'observations', label: `Observations (${observations.length})` },
-            { id: 'surveys', label: `Surveys (${allSurveys.length}) & Box (${suggestions.length})` },
+            { id: 'allowlist', label: `Edit Access & Roles (${allowlist.length})` },
             { id: 'report', label: 'One-Page M1 Report' },
           ] as const
         ).map((tab) => (
@@ -546,18 +598,343 @@ export function AdminPage() {
         </div>
       )}
 
+      {/* TAB 1B: Live Teacher Submissions Hub */}
+      {subTab === 'submissions' && (
+        <div className="space-y-6">
+          {/* 1. Teacher Profiles Joined */}
+          <section className="bg-white dark:bg-[#1F1629] rounded-2xl border border-[#E5D9EC] dark:border-[#332442] p-5 sm:p-6 shadow-sm space-y-4">
+            <div>
+              <h2 className="text-base font-bold text-[#1F122B] dark:text-[#F5EEF9] flex items-center gap-2">
+                <Users className="w-4 h-4 text-[#A8567F]" />
+                Teacher Profiles Submitted ({teachers.length})
+              </h2>
+              <p className="text-xs text-[#5A4A66] dark:text-[#BBAAC9]">
+                Live record of every teacher who signed in and completed their profile.
+              </p>
+            </div>
+            {teachers.length === 0 ? (
+              <p className="text-sm text-[#5A4A66] dark:text-[#BBAAC9]">No teacher profiles submitted yet.</p>
+            ) : (
+              <div className="grid md:grid-cols-2 gap-3">
+                {teachers.map((t) => {
+                  const doneCount = Object.values(t.checklist || {}).filter(Boolean).length;
+                  return (
+                    <div
+                      key={t.uid}
+                      className="p-4 rounded-xl bg-[#FAF7FC] dark:bg-[#160F1F] border border-[#E5D9EC] dark:border-[#332442] space-y-1.5 text-xs"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-bold text-[#3B1050] dark:text-[#E8D5F5]">
+                          {t.displayName}
+                        </p>
+                        <span className="font-semibold text-[#A8567F] dark:text-[#D98EB3] tabular-nums">
+                          Checklist {doneCount}/5
+                        </span>
+                      </div>
+                      <p className="text-[#5A4A66] dark:text-[#BBAAC9]">
+                        <strong>Levels:</strong> {(t.levels || []).join(', ') || '—'} ·{' '}
+                        <strong>Experience:</strong> {t.yearsTeaching} yrs
+                      </p>
+                      {t.classesTaught && (
+                        <p>
+                          <strong>Classes:</strong> {t.classesTaught}
+                        </p>
+                      )}
+                      {t.goodAt && (
+                        <p>
+                          <strong>Strengths:</strong> {t.goodAt}
+                        </p>
+                      )}
+                      {t.wantHelpWith && (
+                        <p>
+                          <strong>Wants help with:</strong> {t.wantHelpWith}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+
+          {/* 2. Training RSVPs, Ratings & Weekly Reflections */}
+          <section className="bg-white dark:bg-[#1F1629] rounded-2xl border border-[#E5D9EC] dark:border-[#332442] p-5 sm:p-6 shadow-sm space-y-4">
+            <div>
+              <h2 className="text-base font-bold text-[#1F122B] dark:text-[#F5EEF9] flex items-center gap-2">
+                <GraduationCap className="w-4 h-4 text-[#A8567F]" />
+                Training RSVPs, Workshop Ratings & Reflections ({trainingResponses.length})
+              </h2>
+              <p className="text-xs text-[#5A4A66] dark:text-[#BBAAC9]">
+                Every RSVP, usefulness/clarity score, comment, and “Try this week” reflection submitted by teachers.
+              </p>
+            </div>
+            {trainingResponses.length === 0 ? (
+              <p className="text-sm text-[#5A4A66] dark:text-[#BBAAC9]">
+                No training RSVPs or reflections submitted yet.
+              </p>
+            ) : (
+              <div className="space-y-2.5">
+                {trainingResponses.map((resp) => {
+                  const sessionTitle =
+                    trainingSessions.find((s) => s.id === resp.sessionId)?.title || resp.sessionId;
+                  return (
+                    <div
+                      key={resp.id}
+                      className="p-4 rounded-xl bg-[#FAF7FC] dark:bg-[#160F1F] border border-[#E5D9EC] dark:border-[#332442] text-xs space-y-1.5"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-sm font-bold text-[#1F122B] dark:text-[#F5EEF9]">
+                          {resp.teacherName}{' '}
+                          <span className="font-normal text-[#5A4A66] dark:text-[#BBAAC9]">
+                            · {sessionTitle}
+                          </span>
+                        </p>
+                        <div className="flex items-center gap-2">
+                          {resp.rsvp && (
+                            <span
+                              className={`font-semibold ${
+                                resp.rsvp === 'going'
+                                  ? 'text-emerald-700 dark:text-emerald-400'
+                                  : 'text-amber-700 dark:text-amber-400'
+                              }`}
+                            >
+                              {resp.rsvp === 'going' ? 'Going' : 'Cannot attend'}
+                            </span>
+                          )}
+                          {(resp.feedbackUseful > 0 || resp.feedbackClear > 0) && (
+                            <span className="font-semibold text-[#3B1050] dark:text-[#E2B8D0] tabular-nums">
+                              Useful {resp.feedbackUseful}/5 · Clear {resp.feedbackClear}/5
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      {resp.feedbackComment && (
+                        <p>
+                          <strong>Workshop feedback:</strong> {resp.feedbackComment}
+                        </p>
+                      )}
+                      {resp.reflection && (
+                        <p>
+                          <strong>Weekly reflection:</strong> {resp.reflection}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+
+          {/* 3. Pending Resource Suggestions & Teacher Rating Comments */}
+          <section className="bg-white dark:bg-[#1F1629] rounded-2xl border border-[#E5D9EC] dark:border-[#332442] p-5 sm:p-6 shadow-sm space-y-4">
+            <div>
+              <h2 className="text-base font-bold text-[#1F122B] dark:text-[#F5EEF9] flex items-center gap-2">
+                <FolderOpen className="w-4 h-4 text-[#A8567F]" />
+                Teacher-Suggested Resources Pending Approval ({pendingResources.length})
+              </h2>
+              <p className="text-xs text-[#5A4A66] dark:text-[#BBAAC9]">
+                Approve resources suggested by teachers so they appear in the shared Resource Library.
+              </p>
+            </div>
+            {pendingResources.length === 0 ? (
+              <p className="text-sm text-[#5A4A66] dark:text-[#BBAAC9]">
+                No pending resource suggestions right now.
+              </p>
+            ) : (
+              <div className="space-y-2.5">
+                {pendingResources.map((res) => (
+                  <div
+                    key={res.id}
+                    className="p-4 rounded-xl bg-[#FAF7FC] dark:bg-[#160F1F] border border-[#E5D9EC] dark:border-[#332442] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+                  >
+                    <div className="space-y-1">
+                      <p className="text-sm font-bold text-[#1F122B] dark:text-[#F5EEF9]">
+                        {res.title}{' '}
+                        <span className="font-normal text-[#A8567F] dark:text-[#D98EB3]">
+                          ({res.level} · {res.skill} · {res.type})
+                        </span>
+                      </p>
+                      <p className="text-[#5A4A66] dark:text-[#BBAAC9]">
+                        Suggested by <strong>{res.addedBy}</strong>
+                        {res.description ? ` — ${res.description}` : ''}
+                      </p>
+                      <a
+                        href={res.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-[#3B1050] dark:text-[#E2B8D0] font-semibold hover:underline"
+                      >
+                        Open link <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => handleApproveResource(res.id)}
+                        className="min-h-[38px] px-3.5 py-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold"
+                      >
+                        Approve
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteResource(res.id)}
+                        className="min-h-[38px] px-3 py-1.5 rounded-xl border border-red-300 dark:border-red-900 text-red-600 dark:text-red-400 text-xs font-semibold"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {resourceRatingComments.length > 0 && (
+              <div className="pt-4 border-t border-[#E5D9EC] dark:border-[#332442] space-y-2">
+                <h3 className="text-xs font-bold text-[#3B1050] dark:text-[#E2B8D0]">
+                  Teacher Resource Feedback Comments ({resourceRatingComments.length})
+                </h3>
+                {resourceRatingComments.map((st) => {
+                  const rTitle = resources.find((r) => r.id === st.resourceId)?.title || st.resourceId;
+                  const tName = teachers.find((t) => t.uid === st.uid)?.displayName || 'Teacher';
+                  return (
+                    <div
+                      key={st.id}
+                      className="p-3 rounded-xl bg-[#FAF7FC] dark:bg-[#160F1F] text-xs"
+                    >
+                      <strong>{tName}</strong> on <em>{rTitle}</em> ({st.rating || 'rated'}):{' '}
+                      {st.ratingComment}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+
+          {/* 4. Teacher-Submitted FAQ Questions */}
+          <section className="bg-white dark:bg-[#1F1629] rounded-2xl border border-[#E5D9EC] dark:border-[#332442] p-5 sm:p-6 shadow-sm space-y-4">
+            <div>
+              <h2 className="text-base font-bold text-[#1F122B] dark:text-[#F5EEF9] flex items-center gap-2">
+                <HelpCircle className="w-4 h-4 text-[#A8567F]" />
+                Teacher-Submitted FAQ Questions ({faqs.length})
+              </h2>
+              <p className="text-xs text-[#5A4A66] dark:text-[#BBAAC9]">
+                All student questions submitted by teachers (answer or edit them anytime in Teacher Voice & FAQ).
+              </p>
+            </div>
+            {faqs.length === 0 ? (
+              <p className="text-sm text-[#5A4A66] dark:text-[#BBAAC9]">No FAQ questions submitted yet.</p>
+            ) : (
+              <div className="space-y-2.5">
+                {faqs.map((f) => (
+                  <div
+                    key={f.id}
+                    className="p-4 rounded-xl bg-[#FAF7FC] dark:bg-[#160F1F] border border-[#E5D9EC] dark:border-[#332442] text-xs space-y-1"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="font-semibold text-[#A8567F] dark:text-[#D98EB3]">
+                        {f.level} · {f.category} · Asked by {f.askedByName}
+                      </span>
+                      <span
+                        className={`font-semibold ${
+                          f.status === 'answered'
+                            ? 'text-emerald-700 dark:text-emerald-400'
+                            : 'text-amber-700 dark:text-amber-400'
+                        }`}
+                      >
+                        {f.status === 'answered' ? 'Answered' : 'Needs answer'}
+                      </span>
+                    </div>
+                    <p className="text-sm font-semibold text-[#1F122B] dark:text-[#F5EEF9]">
+                      {f.question}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
+          {/* 5. All Weekly Syllabus Tracker Updates */}
+          <section className="bg-white dark:bg-[#1F1629] rounded-2xl border border-[#E5D9EC] dark:border-[#332442] p-5 sm:p-6 shadow-sm space-y-4">
+            <h2 className="text-base font-bold text-[#1F122B] dark:text-[#F5EEF9]">
+              All Weekly Syllabus Updates ({syllabusEntries.length})
+            </h2>
+            {syllabusEntries.length === 0 ? (
+              <p className="text-sm text-[#5A4A66] dark:text-[#BBAAC9]">No weekly syllabus updates submitted yet.</p>
+            ) : (
+              <div className="space-y-2.5">
+                {syllabusEntries.map((entry) => (
+                  <div
+                    key={entry.id}
+                    className="p-4 rounded-xl bg-[#FAF7FC] dark:bg-[#160F1F] border border-[#E5D9EC] dark:border-[#332442] flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs"
+                  >
+                    <div className="space-y-0.5">
+                      <p className="text-sm font-bold text-[#1F122B] dark:text-[#F5EEF9]">
+                        {entry.levelName} · {entry.className} · {entry.weekLabel}
+                      </p>
+                      <p className="text-[#5A4A66] dark:text-[#BBAAC9]">
+                        By <strong>{entry.teacherName}</strong> · Planned: {entry.plannedUnit}
+                        {entry.completedUnit ? ` · Completed: ${entry.completedUnit}` : ''}
+                      </p>
+                      {entry.materialsGap && (
+                        <p className="text-[#8B2C5C] dark:text-[#F0A8CB] font-semibold">
+                          Materials gap: {entry.materialsGap}
+                        </p>
+                      )}
+                    </div>
+                    <span className="font-semibold text-[#3B1050] dark:text-[#E2B8D0] capitalize shrink-0">
+                      {entry.status.replace('_', ' ')}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
+          {/* 6. Recent Team Hellos & Icebreaker Answers */}
+          <section className="bg-white dark:bg-[#1F1629] rounded-2xl border border-[#E5D9EC] dark:border-[#332442] p-5 sm:p-6 shadow-sm space-y-4">
+            <h2 className="text-base font-bold text-[#1F122B] dark:text-[#F5EEF9] flex items-center gap-2">
+              <MessageSquare className="w-4 h-4 text-[#A8567F]" />
+              Team Hellos & Icebreaker Posts ({helloFeed.length})
+            </h2>
+            {helloFeed.length === 0 ? (
+              <p className="text-sm text-[#5A4A66] dark:text-[#BBAAC9]">No team posts yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {helloFeed.slice(0, 20).map((post) => (
+                  <div
+                    key={post.id}
+                    className="p-3.5 rounded-xl bg-[#FAF7FC] dark:bg-[#160F1F] border border-[#E5D9EC] dark:border-[#332442] text-xs space-y-0.5"
+                  >
+                    <p className="font-bold text-[#3B1050] dark:text-[#E2B8D0]">
+                      {post.authorName}{' '}
+                      <span className="font-normal text-[#A8567F] dark:text-[#D98EB3]">
+                        {post.type === 'hello' && post.targetName
+                          ? `said hello to ${post.targetName}`
+                          : 'answered the weekly icebreaker'}
+                      </span>
+                    </p>
+                    <p className="text-sm text-[#1F122B] dark:text-[#F5EEF9]">{post.message}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        </div>
+      )}
+
       {/* TAB 2: Allowlist & Roles */}
       {subTab === 'allowlist' && (
         <section className="bg-white dark:bg-[#1F1629] rounded-2xl border border-[#E5D9EC] dark:border-[#332442] p-5 sm:p-6 shadow-sm space-y-5">
           <div>
             <h2 className="text-lg font-bold text-[#1F122B] dark:text-[#F5EEF9] flex items-center gap-2">
               <UserPlus className="w-5 h-5 text-[#A8567F]" />
-              Email Allowlist & Edit Access
+              Edit Access & Special Roles
             </h2>
             <p className="text-xs text-[#5A4A66] dark:text-[#BBAAC9] mt-1">
-              Any Gmail account can sign in to view the hub in read-only mode (cannot edit
-              anything). Only your owner account ({BOOTSTRAPPED_ADMIN_EMAIL}) can edit by default.
-              Add an email below to grant edit or teacher access.
+              Any Gmail account can automatically sign in as a Teacher (complete their profile,
+              submit surveys, RSVP, book 1-to-1s, and send feedback). Only your owner account (
+              {BOOTSTRAPPED_ADMIN_EMAIL}) can edit hub content by default. Add an email below to
+              grant Editor / Admin access or restrict someone to View Only.
             </p>
           </div>
 
@@ -585,9 +962,9 @@ export function AdminPage() {
                 onChange={(e) => setNewRole(e.target.value as UserRole)}
                 className="sm:col-span-3 min-h-[44px] px-3 py-2 rounded-xl border border-[#E5D9EC] dark:border-[#332442] bg-[#FAF7FC] dark:bg-[#140D1A] text-sm"
               >
-                <option value="admin">Editor / Admin (can edit)</option>
                 <option value="teacher">Teacher (forms & profile)</option>
-                <option value="viewer">View Only (cannot edit)</option>
+                <option value="viewer">View Only (cannot touch anything)</option>
+                <option value="admin">Editor / Admin (full edit)</option>
               </select>
               <button
                 type="submit"
@@ -621,8 +998,8 @@ export function AdminPage() {
                       colSpan={isPrimaryOwner ? 4 : 3}
                       className="py-6 text-center text-xs text-[#5A4A66] dark:text-[#BBAAC9]"
                     >
-                      No other emails added yet. Any Gmail account can view the hub (read-only),
-                      and only your owner account can currently edit.
+                      No special roles added yet. Any Gmail account can join as a Teacher and
+                      submit forms/surveys; only your owner account can currently edit hub content.
                     </td>
                   </tr>
                 ) : (
@@ -972,13 +1349,18 @@ export function AdminPage() {
             )}
 
             <div className="pt-4 border-t border-[#E5D9EC] dark:border-[#332442] space-y-3">
-              <h3 className="text-sm font-bold">Individual Survey Notes</h3>
+              <h3 className="text-sm font-bold">Individual Survey Responses ({allSurveys.length})</h3>
               {allSurveys.map((s) => (
                 <div
                   key={s.uid}
-                  className="p-3.5 rounded-xl bg-[#FAF7FC] dark:bg-[#160F1F] text-xs space-y-1"
+                  className="p-3.5 rounded-xl bg-[#FAF7FC] dark:bg-[#160F1F] border border-[#E5D9EC] dark:border-[#332442] text-xs space-y-1.5"
                 >
                   <p className="font-bold text-[#3B1050] dark:text-[#E2B8D0]">{s.teacherName}</p>
+                  {s.helpTopics && s.helpTopics.length > 0 && (
+                    <p>
+                      <strong>Requested topics:</strong> {s.helpTopics.join(', ')}
+                    </p>
+                  )}
                   {s.feedbackStyle && <p><strong>Feedback style:</strong> {s.feedbackStyle}</p>}
                   {s.bestTimes && <p><strong>Best times:</strong> {s.bestTimes}</p>}
                   {s.ideas && <p><strong>Ideas:</strong> {s.ideas}</p>}

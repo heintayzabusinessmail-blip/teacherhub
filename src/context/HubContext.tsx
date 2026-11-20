@@ -179,19 +179,19 @@ export function HubProvider({ children }: { children: React.ReactNode }) {
           setRole(
             data.role === 'admin'
               ? 'admin'
-              : data.role === 'teacher'
-                ? 'teacher'
-                : 'viewer'
+              : data.role === 'viewer'
+                ? 'viewer'
+                : 'teacher'
           );
         } else {
-          // Any signed-in Gmail / email account can enter in strictly View-Only mode
+          // Any signed-in Gmail account joins as a teacher (can submit surveys, profiles, RSVPs, feedback — cannot edit hub content)
           setIsAllowed(true);
-          setRole('viewer');
+          setRole('teacher');
         }
       } catch (err) {
         console.error('Allowlist check error:', err);
         setIsAllowed(true);
-        setRole('viewer');
+        setRole('teacher');
       } finally {
         setAuthLoading(false);
       }

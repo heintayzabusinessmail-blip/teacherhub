@@ -40,7 +40,7 @@ interface NavItemDef {
 
 const ALL_NAV_ITEMS: NavItemDef[] = [
   { id: 'home', label: 'Home', shortLabel: 'Home', icon: Home, group: 'core' },
-  { id: 'plan', label: 'The Plan', shortLabel: 'Plan', icon: Compass, group: 'core' },
+  { id: 'plan', label: 'About Me & Our Plan', shortLabel: 'About & Plan', icon: Compass, group: 'core' },
   { id: 'roadmap', label: '6-Month Roadmap', shortLabel: 'Roadmap', icon: Calendar, group: 'core' },
   { id: 'my-month-1', label: 'My Month 1', shortLabel: 'My M1', icon: CheckSquare, group: 'core' },
   { id: 'team', label: 'Meet the Team', shortLabel: 'Team', icon: Users, group: 'team' },
@@ -245,8 +245,8 @@ export function AppShell({ activeTab, onSelectTab, children }: AppShellProps) {
               <Eye className="w-4 h-4 text-[#A8567F] shrink-0" />
               <span>
                 <strong className="text-[#1F122B] dark:text-[#F5EEF9]">View-only access:</strong>{' '}
-                You can read all pages and download PDFs. Only Tr Hein (or approved editors) can
-                make changes.
+                You can read all pages and download PDFs, and cannot edit, post, or submit
+                anything.
               </span>
             </div>
           )}

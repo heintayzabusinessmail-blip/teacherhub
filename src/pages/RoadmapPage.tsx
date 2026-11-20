@@ -805,24 +805,26 @@ export function RoadmapPage() {
                     </ul>
                   )}
 
-                  <form onSubmit={handlePostComment} className="flex gap-2">
-                    <input
-                      type="text"
-                      maxLength={500}
-                      value={commentInput}
-                      onChange={(e) => setCommentInput(e.target.value)}
-                      placeholder={`Suggest a fix, pacing note, or missing slide for ${activeMap.levelName}...`}
-                      className="flex-1 min-h-[44px] px-3.5 py-2 rounded-xl border border-[#E5D9EC] dark:border-[#332442] bg-[#FAF7FC] dark:bg-[#140D1A] text-sm"
-                    />
-                    <button
-                      type="submit"
-                      disabled={postingComment || !commentInput.trim()}
-                      className="min-h-[44px] px-4 py-2 rounded-xl bg-[#3B1050] hover:bg-[#4E1869] text-white text-sm font-semibold inline-flex items-center gap-1.5 disabled:opacity-50"
-                    >
-                      <Send className="w-4 h-4" />
-                      Post
-                    </button>
-                  </form>
+                  {canInteract && (
+                    <form onSubmit={handlePostComment} className="flex gap-2">
+                      <input
+                        type="text"
+                        maxLength={500}
+                        value={commentInput}
+                        onChange={(e) => setCommentInput(e.target.value)}
+                        placeholder={`Suggest a fix, pacing note, or missing slide for ${activeMap.levelName}...`}
+                        className="flex-1 min-h-[44px] px-3.5 py-2 rounded-xl border border-[#E5D9EC] dark:border-[#332442] bg-[#FAF7FC] dark:bg-[#140D1A] text-sm"
+                      />
+                      <button
+                        type="submit"
+                        disabled={postingComment || !commentInput.trim()}
+                        className="min-h-[44px] px-4 py-2 rounded-xl bg-[#3B1050] hover:bg-[#4E1869] text-white text-sm font-semibold inline-flex items-center gap-1.5 disabled:opacity-50"
+                      >
+                        <Send className="w-4 h-4" />
+                        Post
+                      </button>
+                    </form>
+                  )}
                 </div>
               </div>
             )}
@@ -843,14 +845,16 @@ export function RoadmapPage() {
               slides or audio directly to Tr Hein. (No student names — class progress only.)
             </p>
           </div>
-          <button
-            type="button"
-            onClick={openCreateTrackerEntry}
-            className="min-h-[44px] inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#3B1050] hover:bg-[#4E1869] text-white text-sm font-semibold whitespace-nowrap no-print"
-          >
-            <Plus className="w-4 h-4" />
-            Add weekly update
-          </button>
+          {canInteract && (
+            <button
+              type="button"
+              onClick={openCreateTrackerEntry}
+              className="min-h-[44px] inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#3B1050] hover:bg-[#4E1869] text-white text-sm font-semibold whitespace-nowrap no-print"
+            >
+              <Plus className="w-4 h-4" />
+              Add weekly update
+            </button>
+          )}
         </div>
 
         {/* Create / Edit Weekly Update Form */}

@@ -691,34 +691,6 @@ STEP 4 — AGREE SUPPORT (3 mins)
 STEP 5 — SET REVIEW DATE (2 mins)
 "Let’s check in on [Date] to see how it went and celebrate what improved. Thank you again!"`,
   },
-  {
-    id: 'monthly-report',
-    title: 'Monthly One-Page Report Template',
-    purpose: 'Concise monthly summary shared with the Founder — focuses on team progress and support.',
-    templateText: `YAO ENGLISH — MONTHLY ACADEMIC REPORT (SAMPLE)
-Month: Month 1 | Prepared by: Tr Hein Tay Za, Academic Coordinator
-
-1. SNAPSHOT METRICS
-- Baseline classes observed: 6 / 6 teachers (100%)
-- Private feedback meetings held within 2 days: 6 / 6
-- Training workshops delivered: 2 (Average teacher rating: 4.8 / 5)
-- Curriculum maps completed: 4 / 4 levels (A2, B1, B2, One-to-One)
-
-2. TOP TEACHING STRENGTHS SEEN
-- Warm rapport and strong encouragement across all Zoom classes.
-- Teachers actively use chat and student names to include quieter learners.
-
-3. COMMON CHANGES AGREED (TEAM-WIDE THEMES)
-- Shortening instructions and adding 1 quick checking question (ICQ) before breakout rooms.
-- Protecting the final 15 minutes for student speaking practice.
-
-4. STUDENTS NEEDING EXTRA SUPPORT (NO PERSONAL NAMES)
-- 2 learners in A2 Evening Group need slower listening speed & extra vocabulary recap (coordinated with Student Support Coordinator).
-
-5. ACTIONS & NEXT MONTH PRIORITIES
-- Complete audio/slide gap fixes for B1 Unit 3 and B2 Unit 2.
-- Begin weekly 5-minute lesson plan check-ins in Month 2.`,
-  },
 ];
 
 export const GOOD_PRACTICE_CARDS = [

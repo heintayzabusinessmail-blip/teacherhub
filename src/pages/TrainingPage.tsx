@@ -402,46 +402,50 @@ export function TrainingPage() {
                     <span className="text-xs text-[#5A4A66] dark:text-[#BBAAC9] tabular-nums">
                       {goingCount} going
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => upsertTrainingResponse(session.id, { rsvp: 'going' })}
-                      className={`min-h-[40px] inline-flex items-center gap-1 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-colors ${
-                        myRes?.rsvp === 'going'
-                          ? 'bg-emerald-700 text-white'
-                          : 'bg-[#F4EEF7] dark:bg-[#2A1D38] text-[#3B1050] dark:text-[#E8D5F5]'
-                      }`}
-                    >
-                      <Check className="w-3.5 h-3.5" />
-                      Going
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => upsertTrainingResponse(session.id, { rsvp: 'cannot_come' })}
-                      className={`min-h-[40px] px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-colors ${
-                        myRes?.rsvp === 'cannot_come'
-                          ? 'bg-[#A8567F] text-white'
-                          : 'bg-[#F4EEF7] dark:bg-[#2A1D38] text-[#5A4A66] dark:text-[#BBAAC9]'
-                      }`}
-                    >
-                      Cannot come
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (isFbOpen) {
-                          setFeedbackOpenId(null);
-                        } else {
-                          setFbUseful(myRes?.feedbackUseful || 5);
-                          setFbClear(myRes?.feedbackClear || 5);
-                          setFbComment(myRes?.feedbackComment || '');
-                          setFeedbackOpenId(session.id);
-                        }
-                      }}
-                      className="min-h-[40px] inline-flex items-center gap-1 px-3.5 py-1.5 rounded-xl border border-[#E5D9EC] dark:border-[#332442] text-xs font-semibold"
-                    >
-                      <Star className="w-3.5 h-3.5 text-[#A8567F]" />
-                      {myRes?.feedbackUseful ? 'Edit feedback' : '3-question feedback'}
-                    </button>
+                    {canInteract && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => upsertTrainingResponse(session.id, { rsvp: 'going' })}
+                          className={`min-h-[40px] inline-flex items-center gap-1 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-colors ${
+                            myRes?.rsvp === 'going'
+                              ? 'bg-emerald-700 text-white'
+                              : 'bg-[#F4EEF7] dark:bg-[#2A1D38] text-[#3B1050] dark:text-[#E8D5F5]'
+                          }`}
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                          Going
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => upsertTrainingResponse(session.id, { rsvp: 'cannot_come' })}
+                          className={`min-h-[40px] px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-colors ${
+                            myRes?.rsvp === 'cannot_come'
+                              ? 'bg-[#A8567F] text-white'
+                              : 'bg-[#F4EEF7] dark:bg-[#2A1D38] text-[#5A4A66] dark:text-[#BBAAC9]'
+                          }`}
+                        >
+                          Cannot come
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (isFbOpen) {
+                              setFeedbackOpenId(null);
+                            } else {
+                              setFbUseful(myRes?.feedbackUseful || 5);
+                              setFbClear(myRes?.feedbackClear || 5);
+                              setFbComment(myRes?.feedbackComment || '');
+                              setFeedbackOpenId(session.id);
+                            }
+                          }}
+                          className="min-h-[40px] inline-flex items-center gap-1 px-3.5 py-1.5 rounded-xl border border-[#E5D9EC] dark:border-[#332442] text-xs font-semibold"
+                        >
+                          <Star className="w-3.5 h-3.5 text-[#A8567F]" />
+                          {myRes?.feedbackUseful ? 'Edit feedback' : '3-question feedback'}
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
 

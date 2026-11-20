@@ -352,24 +352,26 @@ export function TeamPage() {
             </p>
           )}
 
-          <form onSubmit={handlePostIcebreaker} className="flex gap-2">
-            <input
-              type="text"
-              maxLength={400}
-              value={iceAnswer}
-              onChange={(e) => setIceAnswer(e.target.value)}
-              placeholder="Answer in one friendly line..."
-              className="flex-1 min-h-[44px] px-3.5 py-2 rounded-xl border border-[#E5D9EC] dark:border-[#332442] bg-[#FAF7FC] dark:bg-[#140D1A] text-sm"
-            />
-            <button
-              type="submit"
-              disabled={sendingIce || !iceAnswer.trim()}
-              className="min-h-[44px] px-4 py-2 rounded-xl bg-[#A8567F] hover:bg-[#91446A] text-white text-sm font-semibold inline-flex items-center gap-1.5 disabled:opacity-50"
-            >
-              <Send className="w-4 h-4" />
-              Post
-            </button>
-          </form>
+          {canInteract && (
+            <form onSubmit={handlePostIcebreaker} className="flex gap-2">
+              <input
+                type="text"
+                maxLength={400}
+                value={iceAnswer}
+                onChange={(e) => setIceAnswer(e.target.value)}
+                placeholder="Answer in one friendly line..."
+                className="flex-1 min-h-[44px] px-3.5 py-2 rounded-xl border border-[#E5D9EC] dark:border-[#332442] bg-[#FAF7FC] dark:bg-[#140D1A] text-sm"
+              />
+              <button
+                type="submit"
+                disabled={sendingIce || !iceAnswer.trim()}
+                className="min-h-[44px] px-4 py-2 rounded-xl bg-[#A8567F] hover:bg-[#91446A] text-white text-sm font-semibold inline-flex items-center gap-1.5 disabled:opacity-50"
+              >
+                <Send className="w-4 h-4" />
+                Post
+              </button>
+            </form>
+          )}
 
           {icebreakerAnswers.length > 0 && (
             <div className="space-y-2 pt-2 border-t border-[#E5D9EC] dark:border-[#332442]">
@@ -507,7 +509,7 @@ export function TeamPage() {
                 </div>
 
                 <div className="pt-3 border-t border-[#F0E6F5] dark:border-[#2E203D] flex items-center justify-between gap-2">
-                  {isMe ? (
+                  {isMe && canInteract ? (
                     <button
                       type="button"
                       onClick={openEditMyCard}
@@ -516,7 +518,7 @@ export function TeamPage() {
                       <Edit3 className="w-3.5 h-3.5" />
                       Edit my card
                     </button>
-                  ) : (
+                  ) : canInteract ? (
                     <button
                       type="button"
                       onClick={() => {
@@ -528,7 +530,7 @@ export function TeamPage() {
                       <Heart className="w-3.5 h-3.5" />
                       Say hello
                     </button>
-                  )}
+                  ) : null}
                 </div>
               </article>
             );
