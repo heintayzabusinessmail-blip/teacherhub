@@ -263,3 +263,28 @@ export interface SyllabusEntry {
   createdAt?: Timestamp | null;
   updatedAt?: Timestamp | null;
 }
+
+export type NotificationAudience = 'admin' | 'teachers' | 'all';
+
+export type NotificationCategory =
+  | 'survey_submitted'
+  | 'meeting_booked'
+  | 'meeting_cancelled'
+  | 'faq_asked'
+  | 'resource_suggested'
+  | 'admin_notice';
+
+export interface HubNotification {
+  id: string;
+  audience: NotificationAudience;
+  category: NotificationCategory;
+  priority: 'normal' | 'important';
+  title: string;
+  message: string;
+  actorUid: string;
+  actorName: string;
+  targetTab: string;
+  readByAdmin: boolean;
+  createdAt?: Timestamp | null;
+}
+

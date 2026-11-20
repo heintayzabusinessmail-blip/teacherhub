@@ -26,6 +26,7 @@ import type {
   GalleryItem,
   HelloPost,
   HubConfigDoc,
+  HubNotification,
   NeedsSurveyDoc,
   ObservationDoc,
   OneToOneSlot,
@@ -74,6 +75,7 @@ interface HubContextValue {
   faqs: FaqItem[];
   suggestions: AnonymousSuggestion[];
   syllabusEntries: SyllabusEntry[];
+  notifications: HubNotification[];
   hasSampleData: boolean;
 }
 
@@ -118,6 +120,7 @@ export function HubProvider({ children }: { children: React.ReactNode }) {
   const [faqs, setFaqs] = useState<FaqItem[]>([]);
   const [suggestions, setSuggestions] = useState<AnonymousSuggestion[]>([]);
   const [syllabusEntries, setSyllabusEntries] = useState<SyllabusEntry[]>([]);
+  const [notifications, setNotifications] = useState<HubNotification[]>([]);
 
   // Apply dark mode class to <html>
   useEffect(() => {
@@ -225,6 +228,7 @@ export function HubProvider({ children }: { children: React.ReactNode }) {
       setFaqs([]);
       setSuggestions([]);
       setSyllabusEntries([]);
+      setNotifications([]);
       setProfileLoaded(false);
       setSyncError(null);
       return;
@@ -503,6 +507,45 @@ export function HubProvider({ children }: { children: React.ReactNode }) {
       )
     );
 
+    // 12c. Live Notifications (role-scoped to satisfy Firestore rules)
+    if (isAdmin) {
+      unsubs.push(
+        onSnapshot(
+          collection(db, 'notifications'),
+          (snap) => {
+            const list = snap.docs.map((d) => ({ ...(d.data() as HubNotification), id: d.id }));
+            list.sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0));
+            setNotifications(list);
+          },
+          (err) => reportSnapshotError(err, OperationType.LIST, 'notifications/admin')
+        )
+      );
+    } else if (canInteract) {
+      unsubs.push(
+        onSnapshot(
+          query(collection(db, 'notifications'), where('audience', 'in', ['all', 'teachers'])),
+          (snap) => {
+            const list = snap.docs.map((d) => ({ ...(d.data() as HubNotification), id: d.id }));
+            list.sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0));
+            setNotifications(list);
+          },
+          (err) => reportSnapshotError(err, OperationType.LIST, 'notifications/teacher')
+        )
+      );
+    } else {
+      unsubs.push(
+        onSnapshot(
+          query(collection(db, 'notifications'), where('audience', '==', 'all')),
+          (snap) => {
+            const list = snap.docs.map((d) => ({ ...(d.data() as HubNotification), id: d.id }));
+            list.sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0));
+            setNotifications(list);
+          },
+          (err) => reportSnapshotError(err, OperationType.LIST, 'notifications/viewer')
+        )
+      );
+    }
+
     // 13. Admin-only collections
     if (isAdmin) {
       unsubs.push(
@@ -604,6 +647,7 @@ export function HubProvider({ children }: { children: React.ReactNode }) {
     faqs,
     suggestions,
     syllabusEntries,
+    notifications,
     hasSampleData,
   };
 

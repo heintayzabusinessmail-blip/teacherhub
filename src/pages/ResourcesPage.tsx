@@ -11,7 +11,6 @@ import {
   MessageSquareText,
   Plus,
   Search,
-  Sparkles,
   StickyNote,
   ThumbsDown,
   ThumbsUp,
@@ -32,8 +31,10 @@ import { db, handleFirestoreError, OperationType } from '../firebase';
 import { useHub } from '../context/HubContext';
 import { PAGE_SUMMARIES } from '../content/planContent';
 import { PageHeader } from '../components/PageHeader';
+import { ResourceAssistants } from '../components/ResourceAssistants';
 import { getEmbedPreviewUrl, parseResourcesCsv } from '../utils/helpers';
-import type { ResourceItem } from '../types';
+import { notifyAdminOfTeacherAction } from '../utils/notifications';
+import type { NavTab, ResourceItem } from '../types';
 
 const LEVELS = ['All', 'Pre-A1 / A1', 'A2', 'B1', 'B2', 'C1', 'All Levels', 'One-to-One'];
 const SKILLS = ['All', 'Speaking', 'Listening', 'Reading', 'Writing', 'Grammar', 'Vocabulary', 'Pronunciation', 'Assessment', 'Lesson Planning', 'Onboarding'];
@@ -41,14 +42,11 @@ const TYPES = ['All', 'Coursebook', 'Syllabus', 'Template', 'Slides', 'Audio', '
 
 type ViewScope = 'all' | 'bookmarks' | 'recent' | 'notes';
 
-interface AskHubReply {
-  found: boolean;
-  answer: string;
-  usedResourceIds: string[];
-  usedFaqIds: string[];
+interface ResourcesPageProps {
+  onNavigate?: (tab: NavTab) => void;
 }
 
-export function ResourcesPage() {
+export function ResourcesPage({ onNavigate }: ResourcesPageProps) {
   const { user, isAdmin, canInteract, myProfile, resources, myResourceStates, faqs } = useHub();
 
   const [scope, setScope] = useState<ViewScope>('all');
@@ -80,12 +78,6 @@ export function ResourcesPage() {
   const [csvText, setCsvText] = useState('');
   const [importingCsv, setImportingCsv] = useState(false);
   const [csvFeedback, setCsvFeedback] = useState('');
-
-  // Ask the Hub (Grounded Gemini assistant)
-  const [askQuestion, setAskQuestion] = useState('');
-  const [askLoading, setAskLoading] = useState(false);
-  const [askReply, setAskReply] = useState<AskHubReply | null>(null);
-  const [askError, setAskError] = useState('');
 
   const approvedResources = useMemo(() => resources.filter((r) => r.approved), [resources]);
   const pendingSuggestions = useMemo(() => resources.filter((r) => !r.approved), [resources]);
@@ -277,6 +269,18 @@ export function ResourcesPage() {
           createdAt: now,
           updatedAt: now,
         });
+        if (!isAdmin) {
+          const teacherName = (myProfile?.displayName || user.displayName || 'Teacher').slice(0, 120);
+          await notifyAdminOfTeacherAction({
+            actorUid: user.uid,
+            actorName: teacherName,
+            category: 'resource_suggested',
+            title: `New resource suggestion from ${teacherName}`,
+            message: `${fTitle.trim().slice(0, 140)} (${fLevel} · ${fSkill} · ${fType}) is waiting for your approval.`,
+            targetTab: 'admin',
+            priority: 'normal',
+          });
+        }
       }
       setShowAddForm(false);
       setEditingRes(null);
@@ -342,53 +346,6 @@ export function ResourcesPage() {
     }
   };
 
-  const handleAskHub = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!askQuestion.trim()) return;
-    setAskLoading(true);
-    setAskError('');
-    setAskReply(null);
-    try {
-      const res = await fetch('/api/ask-hub', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          question: askQuestion.trim(),
-          resources: approvedResources.map((r) => ({
-            id: r.id,
-            title: r.title,
-            level: r.level,
-            skill: r.skill,
-            type: r.type,
-            description: r.description,
-            url: r.url,
-          })),
-          faqs: faqs
-            .filter((f) => f.status === 'answered')
-            .map((f) => ({
-              id: f.id,
-              question: f.question,
-              level: f.level,
-              category: f.category,
-              explanation: f.explanation,
-              example: f.example,
-              checkingQuestion: f.checkingQuestion,
-            })),
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setAskError(data.error || 'Ask the Hub could not answer right now.');
-      } else {
-        setAskReply(data as AskHubReply);
-      }
-    } catch {
-      setAskError('Could not connect to Ask the Hub. You can still search the library below.');
-    } finally {
-      setAskLoading(false);
-    }
-  };
-
   return (
     <div className="space-y-6">
       <PageHeader
@@ -423,90 +380,14 @@ export function ResourcesPage() {
         }
       />
 
-      {/* Ask the Hub — Grounded Library & FAQ Assistant */}
-      <section className="bg-white dark:bg-[#1F1629] rounded-2xl border border-[#E5D9EC] dark:border-[#332442] p-5 shadow-sm space-y-4">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2 text-xs font-semibold text-[#A8567F] dark:text-[#D98EB3]">
-            <Sparkles className="w-4 h-4" />
-            <span>Ask the Hub (Answers ONLY from YAO Library & FAQ)</span>
-          </div>
-          <p className="text-xs text-[#5A4A66] dark:text-[#BBAAC9]">
-            Ask in plain English — e.g. “pronunciation activity for B1” or “how to explain since vs
-            for”. It always shows which YAO resource it used, and says “I don’t know, ask Tr Hein”
-            when unsure.
-          </p>
-        </div>
-
-        <form onSubmit={handleAskHub} className="flex flex-col sm:flex-row gap-2">
-          <input
-            type="text"
-            maxLength={300}
-            value={askQuestion}
-            onChange={(e) => setAskQuestion(e.target.value)}
-            placeholder="Ask in plain English (e.g., speaking rubric or B1 pronunciation)..."
-            className="flex-1 min-h-[44px] px-4 py-2 rounded-xl border border-[#E5D9EC] dark:border-[#332442] bg-[#FAF7FC] dark:bg-[#140D1A] text-sm"
-          />
-          <button
-            type="submit"
-            disabled={askLoading || !askQuestion.trim()}
-            className="min-h-[44px] px-5 py-2 rounded-xl bg-[#A8567F] hover:bg-[#91446A] text-white text-sm font-semibold whitespace-nowrap disabled:opacity-50"
-          >
-            {askLoading ? 'Checking library...' : 'Ask the Hub'}
-          </button>
-        </form>
-
-        {askError && (
-          <p className="text-xs text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-950/40 p-3 rounded-xl">
-            {askError}
-          </p>
-        )}
-
-        {askReply && (
-          <div className="rounded-xl bg-[#FAF7FC] dark:bg-[#160F1F] border border-[#E5D9EC] dark:border-[#332442] p-4 space-y-3">
-            <p className="text-sm text-[#1F122B] dark:text-[#F5EEF9] leading-relaxed">
-              {askReply.answer}
-            </p>
-            {(askReply.usedResourceIds.length > 0 || askReply.usedFaqIds.length > 0) && (
-              <div className="pt-2 border-t border-[#E5D9EC] dark:border-[#332442] space-y-1.5">
-                <p className="text-xs font-semibold text-[#5A4A66] dark:text-[#BBAAC9]">
-                  Sources used from YAO Hub:
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {askReply.usedResourceIds.map((rid) => {
-                    const item = approvedResources.find((r) => r.id === rid);
-                    if (!item) return null;
-                    return (
-                      <a
-                        key={rid}
-                        href={item.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={() => handleOpenResource(item)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white dark:bg-[#1F1629] border border-[#E5D9EC] dark:border-[#332442] text-xs font-semibold text-[#3B1050] dark:text-[#E2B8D0] hover:border-[#A8567F]"
-                      >
-                        <ExternalLink className="w-3 h-3" />
-                        {item.title}
-                      </a>
-                    );
-                  })}
-                  {askReply.usedFaqIds.map((fid) => {
-                    const f = faqs.find((x) => x.id === fid);
-                    if (!f) return null;
-                    return (
-                      <span
-                        key={fid}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white dark:bg-[#1F1629] border border-[#E5D9EC] dark:border-[#332442] text-xs font-semibold text-[#A8567F] dark:text-[#D98EB3]"
-                      >
-                        FAQ: {f.question}
-                      </span>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </section>
+      {/* Ask the Hub (Problem -> Right Document) & Ask Assistant Coordinator (TKT · TESOL · CELTA) */}
+      <ResourceAssistants
+        approvedResources={approvedResources}
+        faqs={faqs}
+        teacherName={myProfile?.displayName || user?.displayName || 'Teacher'}
+        onOpenResource={handleOpenResource}
+        onNavigate={onNavigate}
+      />
 
       {/* Pending Teacher Suggestions Banner (Admin approves; teachers see own pending) */}
       {pendingSuggestions.length > 0 && (

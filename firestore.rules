@@ -421,8 +421,32 @@ service cloud.firestore {
         && data.updatedAt is timestamp;
     }
 
+    function isValidNotification(data) {
+      return data.keys().hasAll([
+          'audience', 'category', 'priority', 'title', 'message',
+          'actorUid', 'actorName', 'targetTab', 'readByAdmin', 'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'audience', 'category', 'priority', 'title', 'message',
+          'actorUid', 'actorName', 'targetTab', 'readByAdmin', 'createdAt'
+        ])
+        && data.audience in ['admin', 'teachers', 'all']
+        && data.category in [
+          'survey_submitted', 'meeting_booked', 'meeting_cancelled',
+          'faq_asked', 'resource_suggested', 'admin_notice'
+        ]
+        && data.priority in ['normal', 'important']
+        && isValidString(data.title, 1, 160)
+        && isValidString(data.message, 1, 600)
+        && isValidId(data.actorUid)
+        && isValidString(data.actorName, 1, 120)
+        && isValidString(data.targetTab, 0, 40)
+        && data.readByAdmin is bool
+        && data.createdAt is timestamp;
+    }
+
     // =========================================================================
-    // Collection Match Blocks (All 15 Collections Secured)
+    // Collection Match Blocks (All 17 Collections Secured)
     // =========================================================================
 
     // 1. Allowlist (Contains PII: email — strictly isolated; ONLY primary owner can manage access/roles)
@@ -792,6 +816,38 @@ service cloud.firestore {
         );
       allow delete: if isInteractiveUser() && isValidId(entryId)
         && (isAdmin() || existing().teacherUid == request.auth.uid);
+    }
+
+    // 17. Hub Notifications (Teacher submission alerts for Admins + Important Notices from Admin)
+    match /notifications/{notifId} {
+      allow get: if isValidId(notifId) && (
+        isAdmin()
+        || (isInteractiveUser() && existing().audience in ['all', 'teachers'])
+        || (isAllowedUser() && existing().audience == 'all')
+      );
+      allow list: if isAdmin()
+        || (isInteractiveUser() && resource.data.audience in ['all', 'teachers'])
+        || (isAllowedUser() && resource.data.audience == 'all');
+      allow create: if isInteractiveUser() && isValidId(notifId)
+        && isValidNotification(incoming())
+        && incoming().createdAt == request.time
+        && incoming().actorUid == request.auth.uid
+        && (
+          isAdmin()
+          || (
+            incoming().audience == 'admin'
+            && incoming().category in [
+              'survey_submitted', 'meeting_booked', 'meeting_cancelled',
+              'faq_asked', 'resource_suggested'
+            ]
+            && incoming().readByAdmin == false
+          )
+        );
+      allow update: if isAdmin() && isValidId(notifId)
+        && isValidNotification(incoming())
+        && incoming().actorUid == existing().actorUid
+        && incoming().createdAt == existing().createdAt;
+      allow delete: if isAdmin() && isValidId(notifId);
     }
   }
 }

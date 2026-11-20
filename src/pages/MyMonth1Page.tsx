@@ -22,6 +22,7 @@ import {
   getGoogleCalendarUrl,
   getViewerTimeZone,
 } from '../utils/helpers';
+import { notifyAdminOfTeacherAction } from '../utils/notifications';
 import type { NavTab, ObservationDoc } from '../types';
 
 interface MyMonth1PageProps {
@@ -119,16 +120,28 @@ export function MyMonth1Page({ onNavigate }: MyMonth1PageProps) {
   const handleBookSlot = async (slotId: string) => {
     if (!user || !myProfile || !canInteract) return;
     setBusySlotId(slotId);
+    const slot = oneToOneSlots.find((s) => s.id === slotId);
+    const trimmedNotes = bookingNotes.trim().slice(0, 300);
     try {
       await updateDoc(doc(db, 'oneToOneSlots', slotId), {
         bookedByUid: user.uid,
         bookedByName: myProfile.displayName.slice(0, 120),
-        notes: bookingNotes.trim().slice(0, 300),
+        notes: trimmedNotes,
         updatedAt: serverTimestamp(),
       });
       await updateDoc(doc(db, 'teachers', user.uid), {
         checklist: { ...myProfile.checklist, oneToOneBooked: true },
         updatedAt: serverTimestamp(),
+      });
+      const whenLabel = slot ? formatLocalDateTime(slot.dateTimeIso) : 'a 1-to-1 slot';
+      await notifyAdminOfTeacherAction({
+        actorUid: user.uid,
+        actorName: myProfile.displayName,
+        category: 'meeting_booked',
+        title: `${myProfile.displayName} booked a 1-to-1 meeting`,
+        message: `${slot?.label || '1-to-1 Chat'} on ${whenLabel}${trimmedNotes ? ` · Note: "${trimmedNotes}"` : ''}`,
+        targetTab: 'admin',
+        priority: 'important',
       });
       setBookingNotes('');
     } catch (err) {
@@ -141,6 +154,7 @@ export function MyMonth1Page({ onNavigate }: MyMonth1PageProps) {
   const handleCancelSlot = async (slotId: string) => {
     if (!user || !myProfile || !canInteract) return;
     setBusySlotId(slotId);
+    const slot = oneToOneSlots.find((s) => s.id === slotId);
     try {
       await updateDoc(doc(db, 'oneToOneSlots', slotId), {
         bookedByUid: '',
@@ -151,6 +165,16 @@ export function MyMonth1Page({ onNavigate }: MyMonth1PageProps) {
       await updateDoc(doc(db, 'teachers', user.uid), {
         checklist: { ...myProfile.checklist, oneToOneBooked: false },
         updatedAt: serverTimestamp(),
+      });
+      const whenLabel = slot ? formatLocalDateTime(slot.dateTimeIso) : 'their 1-to-1 slot';
+      await notifyAdminOfTeacherAction({
+        actorUid: user.uid,
+        actorName: myProfile.displayName,
+        category: 'meeting_cancelled',
+        title: `${myProfile.displayName} cancelled a 1-to-1 booking`,
+        message: `Freed up ${slot?.label || '1-to-1 slot'} on ${whenLabel}.`,
+        targetTab: 'admin',
+        priority: 'normal',
       });
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `oneToOneSlots/${slotId}`);

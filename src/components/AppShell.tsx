@@ -23,6 +23,7 @@ import { signOutUser } from '../firebase';
 import { useHub } from '../context/HubContext';
 import type { NavTab } from '../types';
 import { getInitials } from '../utils/helpers';
+import { NotificationBar } from './NotificationBar';
 
 interface AppShellProps {
   activeTab: NavTab;
@@ -240,6 +241,7 @@ export function AppShell({ activeTab, onSelectTab, children }: AppShellProps) {
         </div>
 
         <main className="flex-1 w-full max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 pb-24 lg:pb-12">
+          <NotificationBar onSelectTab={handleNavClick} />
           {isViewer && (
             <div className="mb-5 px-4 py-2.5 rounded-xl bg-white dark:bg-[#1F1629] border border-[#E5D9EC] dark:border-[#332442] flex items-center gap-2.5 text-xs text-[#5A4A66] dark:text-[#C5B4D4] no-print">
               <Eye className="w-4 h-4 text-[#A8567F] shrink-0" />

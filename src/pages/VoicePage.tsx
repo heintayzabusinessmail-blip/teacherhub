@@ -23,6 +23,7 @@ import { db, handleFirestoreError, OperationType } from '../firebase';
 import { useHub } from '../context/HubContext';
 import { PAGE_SUMMARIES, SURVEY_HELP_TOPICS } from '../content/planContent';
 import { PageHeader } from '../components/PageHeader';
+import { notifyAdminOfTeacherAction } from '../utils/notifications';
 import type { FaqItem } from '../types';
 
 export function VoicePage() {
@@ -112,6 +113,19 @@ export function VoicePage() {
         });
       }
 
+      await notifyAdminOfTeacherAction({
+        actorUid: user.uid,
+        actorName: payload.teacherName,
+        category: 'survey_submitted',
+        title: `${payload.teacherName} ${mySurvey ? 'updated' : 'submitted'} the Month 1 Needs Survey`,
+        message:
+          payload.helpTopics.length > 0
+            ? `Requested help with: ${payload.helpTopics.slice(0, 4).join(', ')}${payload.bestTimes ? ` · Best times: ${payload.bestTimes}` : ''}`
+            : payload.ideas || 'Submitted Month 1 Needs Survey responses.',
+        targetTab: 'admin',
+        priority: 'important',
+      });
+
       setSurveySavedMsg('Thank you! Your Month 1 Needs Survey is saved.');
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, `needsSurveys/${user.uid}`);
@@ -150,6 +164,16 @@ export function VoicePage() {
         isSample: false,
         createdAt: now,
         updatedAt: now,
+      });
+      const askerName = (myProfile?.displayName || user.displayName || 'Teacher').slice(0, 120);
+      await notifyAdminOfTeacherAction({
+        actorUid: user.uid,
+        actorName: askerName,
+        category: 'faq_asked',
+        title: `New FAQ question from ${askerName} (${qLevel})`,
+        message: qText.trim().slice(0, 400),
+        targetTab: 'voice',
+        priority: 'normal',
       });
       setQText('');
       setShowAskFaq(false);

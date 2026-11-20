@@ -443,6 +443,45 @@
         "createdAt",
         "updatedAt"
       ]
+    },
+    "HubNotification": {
+      "title": "Hub Notification",
+      "description": "Real-time notifications: teacher submission alerts for Owner/Admin and important notices from Admin for teachers and viewers.",
+      "type": "object",
+      "properties": {
+        "audience": { "type": "string", "enum": ["admin", "teachers", "all"] },
+        "category": {
+          "type": "string",
+          "enum": [
+            "survey_submitted",
+            "meeting_booked",
+            "meeting_cancelled",
+            "faq_asked",
+            "resource_suggested",
+            "admin_notice"
+          ]
+        },
+        "priority": { "type": "string", "enum": ["normal", "important"] },
+        "title": { "type": "string", "maxLength": 160 },
+        "message": { "type": "string", "maxLength": 600 },
+        "actorUid": { "type": "string", "maxLength": 128 },
+        "actorName": { "type": "string", "maxLength": 120 },
+        "targetTab": { "type": "string", "maxLength": 40 },
+        "readByAdmin": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "audience",
+        "category",
+        "priority",
+        "title",
+        "message",
+        "actorUid",
+        "actorName",
+        "targetTab",
+        "readByAdmin",
+        "createdAt"
+      ]
     }
   },
   "firestore": {
@@ -513,6 +552,10 @@
     "/syllabusEntries/{entryId}": {
       "schema": { "$ref": "#/entities/SyllabusEntry" },
       "description": "Live weekly syllabus tracker entries per class with materials gap flags."
+    },
+    "/notifications/{notifId}": {
+      "schema": { "$ref": "#/entities/HubNotification" },
+      "description": "Owner/Admin alerts from teacher submissions and visible Important Notices from Admin for teachers and viewers."
     }
   }
 }
