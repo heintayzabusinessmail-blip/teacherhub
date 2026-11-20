@@ -35,7 +35,7 @@ import { getEmbedPreviewUrl, parseResourcesCsv } from '../utils/helpers';
 import { notifyAdminOfTeacherAction } from '../utils/notifications';
 import type { ResourceItem } from '../types';
 
-const LEVELS = ['All', 'Pre-A1 / A1', 'A2', 'B1', 'B2', 'C1', 'All Levels', 'One-to-One'];
+const LEVELS = ['All', 'Pre-A1 / A1', 'A2', 'B1', 'B2', 'C1', 'IELTS', 'All Levels', 'One-to-One'];
 const SKILLS = ['All', 'Speaking', 'Listening', 'Reading', 'Writing', 'Grammar', 'Vocabulary', 'Pronunciation', 'Assessment', 'Lesson Planning', 'Onboarding'];
 const TYPES = ['All', 'Coursebook', 'Syllabus', 'Template', 'Slides', 'Audio', 'Activity', 'Assessment', 'Rubric', 'Training Recording', 'Welcome Video'];
 

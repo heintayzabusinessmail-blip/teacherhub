@@ -96,7 +96,7 @@ export function RoadmapPage() {
   const [busyEntryId, setBusyEntryId] = useState<string | null>(null);
 
   const availableLevelNames = useMemo(() => {
-    const set = new Set<string>(['A2', 'B1', 'B2', 'One-to-One']);
+    const set = new Set<string>(['A2', 'B1', 'B2', 'IELTS', 'One-to-One']);
     curriculumMaps.forEach((m) => {
       if (m.levelName.trim()) set.add(m.levelName.trim());
     });

@@ -16,7 +16,7 @@ import { PAGE_SUMMARIES } from '../content/planContent';
 import { PageHeader } from '../components/PageHeader';
 import { compressImageFileToDataUrl, getInitials } from '../utils/helpers';
 
-const LEVEL_OPTIONS = ['Pre-A1 / A1', 'A2', 'B1', 'B2', 'C1', 'One-to-One', 'Business English', 'Young Learners'];
+const LEVEL_OPTIONS = ['Pre-A1 / A1', 'A2', 'B1', 'B2', 'C1', 'IELTS', 'One-to-One', 'Business English', 'Young Learners'];
 
 export function TeamPage() {
   const { user, isAdmin, canInteract, myProfile, teachers, hubConfig, helloFeed } = useHub();

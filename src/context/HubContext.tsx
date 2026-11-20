@@ -11,13 +11,11 @@ import {
 import {
   auth,
   BOOTSTRAPPED_ADMIN_EMAIL,
-  clearGmailAccessToken,
   completeEmailLinkSignInIfPresent,
   db,
   emailToKey,
   handleFirestoreError,
   OperationType,
-  subscribeGmailTokenState,
   testConnection,
 } from '../firebase';
 import type { PendingEmailDraft } from '../components/EmailConfirmModal';
@@ -58,7 +56,6 @@ interface HubContextValue {
   syncError: Error | null;
   darkMode: boolean;
   toggleDarkMode: () => void;
-  gmailConnected: boolean;
   pendingEmailDraft: PendingEmailDraft | null;
   queueEmailConfirmation: (draft: PendingEmailDraft) => void;
   clearPendingEmailDraft: () => void;
@@ -96,7 +93,6 @@ export function HubProvider({ children }: { children: React.ReactNode }) {
   const [role, setRole] = useState<UserRole>('viewer');
   const [profileLoaded, setProfileLoaded] = useState(false);
   const [syncError, setSyncError] = useState<Error | null>(null);
-  const [gmailConnected, setGmailConnected] = useState(false);
   const [pendingEmailDraft, setPendingEmailDraft] = useState<PendingEmailDraft | null>(null);
 
   const queueEmailConfirmation = (draft: PendingEmailDraft) => setPendingEmailDraft(draft);
@@ -165,17 +161,11 @@ export function HubProvider({ children }: { children: React.ReactNode }) {
       });
   }, []);
 
-  // Track in-memory Gmail connection state
-  useEffect(() => {
-    return subscribeGmailTokenState(setGmailConnected);
-  }, []);
-
   // Auth listener + allowlist verification
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
       if (!firebaseUser || !firebaseUser.email) {
-        clearGmailAccessToken();
         setIsAllowed(false);
         setRole('viewer');
         setProfileLoaded(false);
@@ -665,7 +655,6 @@ export function HubProvider({ children }: { children: React.ReactNode }) {
     syncError,
     darkMode,
     toggleDarkMode,
-    gmailConnected,
     pendingEmailDraft,
     queueEmailConfirmation,
     clearPendingEmailDraft,

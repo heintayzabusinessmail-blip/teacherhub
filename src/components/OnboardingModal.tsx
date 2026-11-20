@@ -6,7 +6,7 @@ import { useHub } from '../context/HubContext';
 import { compressImageFileToDataUrl, getInitials } from '../utils/helpers';
 import { BRAND } from '../content/planContent';
 
-const LEVEL_OPTIONS = ['Pre-A1 / A1', 'A2', 'B1', 'B2', 'C1', 'One-to-One', 'Business English', 'Young Learners'];
+const LEVEL_OPTIONS = ['Pre-A1 / A1', 'A2', 'B1', 'B2', 'C1', 'IELTS', 'One-to-One', 'Business English', 'Young Learners'];
 
 export function OnboardingModal() {
   const { user } = useHub();
@@ -229,7 +229,7 @@ export function OnboardingModal() {
               maxLength={200}
               value={classesTaught}
               onChange={(e) => setClassesTaught(e.target.value)}
-              placeholder="e.g., B1 Evening Group, B2 Weekend Group, One-to-One"
+              placeholder="e.g., B1 Evening Group, IELTS Academic / General, One-to-One"
               className="w-full min-h-[44px] px-3.5 py-2 rounded-xl border border-[#E5D9EC] dark:border-[#332442] bg-[#FAF7FC] dark:bg-[#140D1A] text-sm"
             />
           </div>

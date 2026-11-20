@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowRight,
   Bell,
@@ -10,6 +10,8 @@ import {
   Plus,
   Send,
   Trash2,
+  Volume2,
+  VolumeX,
   X,
 } from 'lucide-react';
 import { deleteDoc, doc, updateDoc } from 'firebase/firestore';
@@ -17,6 +19,12 @@ import { db, handleFirestoreError, OperationType } from '../firebase';
 import { useHub } from '../context/HubContext';
 import { formatLocalDateTime } from '../utils/helpers';
 import { publishAdminNotice } from '../utils/notifications';
+import {
+  ensureNotificationAudioUnlocked,
+  isNotificationSoundEnabled,
+  playNotificationChime,
+  setNotificationSoundEnabled,
+} from '../utils/notificationSound';
 import type { HubNotification, NavTab } from '../types';
 
 interface NotificationBarProps {
@@ -43,6 +51,12 @@ export function NotificationBar({ onSelectTab }: NotificationBarProps) {
   const [adminDrawerTab, setAdminDrawerTab] = useState<'alerts' | 'notices'>('alerts');
   const [showComposer, setShowComposer] = useState(false);
 
+  // Notification sound + live floating big toast
+  const [soundEnabled, setSoundEnabled] = useState<boolean>(() => isNotificationSoundEnabled());
+  const [liveToast, setLiveToast] = useState<HubNotification | null>(null);
+  const knownIdsRef = useRef<Set<string>>(new Set());
+  const initializedRef = useRef(false);
+
   // Admin notice composer state
   const [nTitle, setNTitle] = useState('');
   const [nMessage, setNMessage] = useState('');
@@ -63,6 +77,10 @@ export function NotificationBar({ onSelectTab }: NotificationBarProps) {
       return [];
     }
   });
+
+  useEffect(() => {
+    ensureNotificationAudioUnlocked();
+  }, []);
 
   const markLocalSeen = (ids: string[]) => {
     setSeenIds((prev) => {
@@ -103,6 +121,52 @@ export function NotificationBar({ onSelectTab }: NotificationBarProps) {
   );
 
   const latestAdminAlert = unreadAdminAlerts[0] || teacherAlertsForAdmin[0] || null;
+
+  // Detect brand-new incoming notifications in real time -> play chime + pop BIG toast alert!
+  const relevantLiveFeed = isAdmin ? teacherAlertsForAdmin : publicNotices;
+
+  useEffect(() => {
+    if (!initializedRef.current) {
+      relevantLiveFeed.forEach((n) => knownIdsRef.current.add(n.id));
+      if (notifications.length > 0) {
+        initializedRef.current = true;
+      }
+      // Mark initialized after initial snapshot settles even if collection is empty
+      const timer = setTimeout(() => {
+        initializedRef.current = true;
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+
+    const brandNew = relevantLiveFeed.filter(
+      (n) => !knownIdsRef.current.has(n.id) && n.actorUid !== user?.uid
+    );
+    relevantLiveFeed.forEach((n) => knownIdsRef.current.add(n.id));
+
+    if (brandNew.length > 0) {
+      const newest = brandNew[0];
+      setLiveToast(newest);
+      if (soundEnabled) {
+        playNotificationChime(newest.priority === 'important');
+      }
+    }
+  }, [relevantLiveFeed, notifications.length, soundEnabled, user?.uid]);
+
+  // Auto-hide floating toast after 14 seconds (stays visible in top banner regardless)
+  useEffect(() => {
+    if (!liveToast) return;
+    const timer = setTimeout(() => setLiveToast(null), 14000);
+    return () => clearTimeout(timer);
+  }, [liveToast]);
+
+  const handleToggleSound = () => {
+    const next = !soundEnabled;
+    setSoundEnabled(next);
+    setNotificationSoundEnabled(next);
+    if (next) {
+      playNotificationChime(true);
+    }
+  };
 
   const handleMarkAlertRead = async (n: HubNotification) => {
     if (!isAdmin || n.readByAdmin) return;
@@ -145,7 +209,6 @@ export function NotificationBar({ onSelectTab }: NotificationBarProps) {
     const myEmail = (user?.email || '').trim().toLowerCase();
     const collected = new Set<string>();
 
-    // 1. All matching allowlisted emails (Admin → Edit Access & Special Roles)
     allowlist.forEach((entry) => {
       if (entry.isSample || !entry.email || !entry.email.includes('@')) return;
       const matches =
@@ -157,7 +220,6 @@ export function NotificationBar({ onSelectTab }: NotificationBarProps) {
       }
     });
 
-    // 2. Optional extra emails typed by Admin in the composer
     if (extraRaw.trim()) {
       extraRaw
         .split(/[\s,;]+/)
@@ -192,7 +254,7 @@ export function NotificationBar({ onSelectTab }: NotificationBarProps) {
     const prefix = priority === 'important' ? '[YAO Important Notice]' : '[YAO Hub Notice]';
     const senderName = myProfile?.displayName || user?.displayName || 'Tr Hein Tay Za';
     queueEmailConfirmation({
-      heading: `Email notice to ${recipients.length} registered recipient${recipients.length === 1 ? '' : 's'}`,
+      heading: `Open in Email App (${recipients.length} recipient${recipients.length === 1 ? '' : 's'})`,
       recipients,
       subject: `${prefix} ${title.trim()}`,
       bodyText: `${message.trim()}\n\n— ${senderName} (YAO English Teacher Hub)`,
@@ -208,11 +270,6 @@ export function NotificationBar({ onSelectTab }: NotificationBarProps) {
     const savedMessage = nMessage.trim();
     const savedAudience = nAudience;
     const savedPriority = nPriority;
-    const savedRecipients = getRegisteredEmailsForAudience(
-      savedAudience,
-      extraRecipientsText,
-      includeSelfCopy
-    );
     try {
       await publishAdminNotice({
         actorUid: user.uid,
@@ -223,6 +280,9 @@ export function NotificationBar({ onSelectTab }: NotificationBarProps) {
         message: savedMessage,
         targetTab: nTargetTab,
       });
+      if (soundEnabled) {
+        playNotificationChime(false);
+      }
       setNTitle('');
       setNMessage('');
       setNTargetTab('');
@@ -230,13 +290,6 @@ export function NotificationBar({ onSelectTab }: NotificationBarProps) {
       setIncludeSelfCopy(false);
       setShowComposer(false);
       setAdminDrawerTab('notices');
-      openNoticeEmailPrompt(
-        savedTitle,
-        savedMessage,
-        savedAudience,
-        savedPriority,
-        savedRecipients
-      );
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, 'notifications');
     } finally {
@@ -253,55 +306,126 @@ export function NotificationBar({ onSelectTab }: NotificationBarProps) {
     if (n.targetTab) {
       onSelectTab(n.targetTab as NavTab);
     }
+    setLiveToast(null);
     setDrawerOpen(false);
   };
 
   return (
     <>
-      {/* ALWAYS-VISIBLE TOP NOTIFICATION BAR */}
-      <div className="mb-5 no-print">
+      {/* BIG LIVE FLOATING ALERT POPUP WHEN A NEW NOTIFICATION ARRIVES */}
+      {liveToast && (
+        <div
+          role="alert"
+          className="fixed top-4 right-4 left-4 sm:left-auto sm:w-[440px] z-[55] rounded-2xl bg-[#3B1050] text-white border-2 border-[#E2A7C6] shadow-2xl p-4 sm:p-5 space-y-3 no-print animate-bounce"
+          style={{ animationIterationCount: 1, animationDuration: '0.55s' }}
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start gap-3 min-w-0">
+              <div className="w-11 h-11 rounded-xl bg-[#A8567F] text-white flex items-center justify-center shrink-0">
+                <BellRing className="w-6 h-6" />
+              </div>
+              <div className="min-w-0 space-y-1">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-[#F6CBE0]">
+                  {isAdmin ? 'New Teacher Alert' : 'Important Notice from Admin'}
+                </p>
+                <p className="text-base font-bold leading-snug text-white">
+                  {liveToast.title}
+                </p>
+                <p className="text-xs sm:text-sm text-white/90 leading-relaxed">
+                  {liveToast.message}
+                </p>
+                <p className="text-[11px] text-white/70">
+                  From {liveToast.actorName} · {formatNotifTime(liveToast)}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setLiveToast(null)}
+              className="p-1.5 rounded-lg text-white/75 hover:text-white hover:bg-white/10 shrink-0"
+              aria-label="Dismiss popup alert"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {liveToast.targetTab && (
+              <button
+                type="button"
+                onClick={() => handleJump(liveToast)}
+                className="min-h-[38px] inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-white text-[#3B1050] text-xs font-bold hover:bg-[#F4EEF7]"
+              >
+                Open now
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                if (isAdmin && liveToast.audience === 'admin') {
+                  handleMarkAlertRead(liveToast);
+                } else if (!isAdmin) {
+                  markLocalSeen([liveToast.id]);
+                }
+                setLiveToast(null);
+              }}
+              className="min-h-[38px] px-3.5 py-1.5 rounded-xl bg-white/15 hover:bg-white/25 text-white text-xs font-semibold"
+            >
+              Got it
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* BIG ALWAYS-VISIBLE TOP NOTIFICATION BANNER */}
+      <div className="mb-6 no-print">
         {isAdmin ? (
-          /* OWNER / ADMIN NOTIFICATION BAR */
+          /* OWNER / ADMIN BIG NOTIFICATION BANNER */
           <div
-            className={`rounded-2xl border px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors shadow-xs ${
+            className={`rounded-2xl border-2 px-5 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all ${
               unreadAdminAlerts.length > 0
-                ? 'bg-[#3B1050] text-white border-[#3B1050]'
-                : 'bg-white dark:bg-[#1F1629] text-[#1F122B] dark:text-[#F5EEF9] border-[#E5D9EC] dark:border-[#332442]'
+                ? 'bg-gradient-to-r from-[#3B1050] via-[#531769] to-[#7A2A63] text-white border-[#D98EB3] shadow-lg'
+                : 'bg-white dark:bg-[#1F1629] text-[#1F122B] dark:text-[#F5EEF9] border-[#E5D9EC] dark:border-[#332442] shadow-xs'
             }`}
           >
-            <div className="flex items-start sm:items-center gap-3 min-w-0">
+            <div className="flex items-start gap-3.5 min-w-0">
               <div
-                className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 relative ${
                   unreadAdminAlerts.length > 0
-                    ? 'bg-[#A8567F] text-white'
+                    ? 'bg-white/20 text-white'
                     : 'bg-[#F4EEF7] dark:bg-[#2A1D38] text-[#A8567F]'
                 }`}
               >
                 {unreadAdminAlerts.length > 0 ? (
-                  <BellRing className="w-4 h-4" />
+                  <>
+                    <BellRing className="w-6 h-6" />
+                    <span className="absolute -top-1 -right-1 min-w-[22px] h-[22px] px-1 rounded-full bg-rose-500 text-white text-[11px] font-bold flex items-center justify-center shadow">
+                      {unreadAdminAlerts.length}
+                    </span>
+                  </>
                 ) : (
-                  <Bell className="w-4 h-4" />
+                  <Bell className="w-6 h-6" />
                 )}
               </div>
 
-              <div className="min-w-0">
+              <div className="min-w-0 space-y-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <span
-                    className={`text-xs font-bold uppercase tracking-wide ${
+                    className={`text-xs font-extrabold uppercase tracking-wider ${
                       unreadAdminAlerts.length > 0
-                        ? 'text-[#F3C6DE]'
+                        ? 'text-[#FFD6EA]'
                         : 'text-[#A8567F] dark:text-[#D98EB3]'
                     }`}
                   >
                     {unreadAdminAlerts.length > 0
-                      ? `${unreadAdminAlerts.length} New Teacher Alert${unreadAdminAlerts.length > 1 ? 's' : ''}`
+                      ? `${unreadAdminAlerts.length} New Teacher Notification${unreadAdminAlerts.length > 1 ? 's' : ''}`
                       : 'Admin Notifications'}
                   </span>
                   {latestAdminAlert && (
                     <span
-                      className={`text-[11px] ${
+                      className={`text-xs ${
                         unreadAdminAlerts.length > 0
-                          ? 'text-white/75'
+                          ? 'text-white/80'
                           : 'text-[#7A6888] dark:text-[#9D8AAD]'
                       }`}
                     >
@@ -309,21 +433,50 @@ export function NotificationBar({ onSelectTab }: NotificationBarProps) {
                     </span>
                   )}
                 </div>
-                <p
-                  className={`text-xs sm:text-sm truncate ${
-                    unreadAdminAlerts.length > 0
-                      ? 'text-white font-medium'
-                      : 'text-[#5A4A66] dark:text-[#C5B4D4]'
-                  }`}
-                >
-                  {latestAdminAlert
-                    ? `${latestAdminAlert.title} — ${latestAdminAlert.message}`
-                    : 'You will be notified here automatically whenever a teacher submits a survey or books a 1-to-1 meeting.'}
-                </p>
+                {latestAdminAlert ? (
+                  <div className="space-y-0.5">
+                    <p
+                      className={`text-sm sm:text-base font-bold leading-snug ${
+                        unreadAdminAlerts.length > 0
+                          ? 'text-white'
+                          : 'text-[#1F122B] dark:text-[#F5EEF9]'
+                      }`}
+                    >
+                      {latestAdminAlert.title}
+                    </p>
+                    <p
+                      className={`text-xs sm:text-sm leading-snug line-clamp-2 ${
+                        unreadAdminAlerts.length > 0
+                          ? 'text-white/90'
+                          : 'text-[#5A4A66] dark:text-[#C5B4D4]'
+                      }`}
+                    >
+                      {latestAdminAlert.message}
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-xs sm:text-sm text-[#5A4A66] dark:text-[#C5B4D4]">
+                    Live teacher alerts (surveys, 1-to-1 bookings, FAQs, resource suggestions) will
+                    appear right here with a chime sound.
+                  </p>
+                )}
               </div>
             </div>
 
             <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={handleToggleSound}
+                title={soundEnabled ? 'Notification sound is ON (click to mute)' : 'Sound muted (click to turn ON & test)'}
+                className={`min-h-[40px] inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap ${
+                  unreadAdminAlerts.length > 0
+                    ? 'bg-white/15 hover:bg-white/25 text-white border border-white/25'
+                    : 'bg-[#F4EEF7] dark:bg-[#2A1D38] text-[#3B1050] dark:text-[#E8D5F5]'
+                }`}
+              >
+                {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+                {soundEnabled ? 'Sound On' : 'Muted'}
+              </button>
               <button
                 type="button"
                 onClick={() => {
@@ -331,13 +484,13 @@ export function NotificationBar({ onSelectTab }: NotificationBarProps) {
                   setShowComposer(false);
                   setDrawerOpen(true);
                 }}
-                className={`min-h-[36px] inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap ${
+                className={`min-h-[40px] inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap ${
                   unreadAdminAlerts.length > 0
                     ? 'bg-white text-[#3B1050] hover:bg-[#F4EEF7]'
                     : 'bg-[#F4EEF7] dark:bg-[#2A1D38] text-[#3B1050] dark:text-[#E8D5F5]'
                 }`}
               >
-                <Bell className="w-3.5 h-3.5" />
+                <Bell className="w-4 h-4" />
                 Alerts ({teacherAlertsForAdmin.length})
               </button>
               <button
@@ -347,49 +500,56 @@ export function NotificationBar({ onSelectTab }: NotificationBarProps) {
                   setShowComposer(true);
                   setDrawerOpen(true);
                 }}
-                className={`min-h-[36px] inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap ${
+                className={`min-h-[40px] inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap ${
                   unreadAdminAlerts.length > 0
-                    ? 'bg-[#A8567F] hover:bg-[#91446A] text-white'
+                    ? 'bg-[#A8567F] hover:bg-[#91446A] text-white border border-white/20'
                     : 'bg-[#3B1050] hover:bg-[#4E1869] text-white'
                 }`}
               >
-                <Megaphone className="w-3.5 h-3.5" />
-                Post notice ({publicNotices.length})
+                <Megaphone className="w-4 h-4" />
+                Post Notice ({publicNotices.length})
               </button>
             </div>
           </div>
         ) : (
-          /* TEACHER & VIEWER VISIBLE IMPORTANT NOTICE BAR */
+          /* TEACHER & VIEWER BIG VISIBLE IMPORTANT NOTICE BANNER */
           <div
-            className={`rounded-2xl border px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors shadow-xs ${
+            className={`rounded-2xl border-2 px-5 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all ${
               latestImportantNotice && unreadNoticesForUser.length > 0
-                ? 'bg-gradient-to-r from-[#3B1050] to-[#6B2158] text-white border-[#3B1050]'
+                ? 'bg-gradient-to-r from-[#3B1050] via-[#5E1B61] to-[#8C376B] text-white border-[#E2A7C6] shadow-lg'
                 : latestImportantNotice
-                  ? 'bg-white dark:bg-[#1F1629] text-[#1F122B] dark:text-[#F5EEF9] border-[#A8567F]/50'
-                  : 'bg-white dark:bg-[#1F1629] text-[#1F122B] dark:text-[#F5EEF9] border-[#E5D9EC] dark:border-[#332442]'
+                  ? 'bg-[#FAF3FA] dark:bg-[#241633] text-[#1F122B] dark:text-[#F5EEF9] border-[#A8567F]/70 shadow-sm'
+                  : 'bg-white dark:bg-[#1F1629] text-[#1F122B] dark:text-[#F5EEF9] border-[#E5D9EC] dark:border-[#332442] shadow-xs'
             }`}
           >
-            <div className="flex items-start sm:items-center gap-3 min-w-0">
+            <div className="flex items-start gap-3.5 min-w-0">
               <div
-                className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 relative ${
                   latestImportantNotice && unreadNoticesForUser.length > 0
                     ? 'bg-white/20 text-white'
                     : 'bg-[#F4EEF7] dark:bg-[#2A1D38] text-[#A8567F]'
                 }`}
               >
                 {latestImportantNotice ? (
-                  <Megaphone className="w-4 h-4" />
+                  <>
+                    <Megaphone className="w-6 h-6" />
+                    {unreadNoticesForUser.length > 0 && (
+                      <span className="absolute -top-1 -right-1 min-w-[22px] h-[22px] px-1 rounded-full bg-rose-500 text-white text-[11px] font-bold flex items-center justify-center shadow">
+                        {unreadNoticesForUser.length}
+                      </span>
+                    )}
+                  </>
                 ) : (
-                  <Bell className="w-4 h-4" />
+                  <Bell className="w-6 h-6" />
                 )}
               </div>
 
-              <div className="min-w-0">
+              <div className="min-w-0 space-y-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <span
-                    className={`text-xs font-bold uppercase tracking-wide ${
+                    className={`text-xs font-extrabold uppercase tracking-wider ${
                       latestImportantNotice && unreadNoticesForUser.length > 0
-                        ? 'text-[#F6CBE0]'
+                        ? 'text-[#FFD6EA]'
                         : 'text-[#A8567F] dark:text-[#D98EB3]'
                     }`}
                   >
@@ -400,15 +560,15 @@ export function NotificationBar({ onSelectTab }: NotificationBarProps) {
                       : 'Notices from Admin'}
                   </span>
                   {unreadNoticesForUser.length > 0 && (
-                    <span className="px-1.5 py-0.5 rounded bg-white/20 text-[10px] font-bold text-white">
-                      {unreadNoticesForUser.length} new
+                    <span className="px-2 py-0.5 rounded-md bg-rose-500 text-[11px] font-bold text-white">
+                      {unreadNoticesForUser.length} NEW
                     </span>
                   )}
                   {latestImportantNotice && (
                     <span
-                      className={`text-[11px] ${
+                      className={`text-xs ${
                         unreadNoticesForUser.length > 0
-                          ? 'text-white/75'
+                          ? 'text-white/80'
                           : 'text-[#7A6888] dark:text-[#9D8AAD]'
                       }`}
                     >
@@ -418,29 +578,53 @@ export function NotificationBar({ onSelectTab }: NotificationBarProps) {
                 </div>
 
                 {latestImportantNotice ? (
-                  <p
-                    className={`text-xs sm:text-sm leading-snug mt-0.5 ${
-                      unreadNoticesForUser.length > 0
-                        ? 'text-white'
-                        : 'text-[#1F122B] dark:text-[#F5EEF9]'
-                    }`}
-                  >
-                    <strong>{latestImportantNotice.title}:</strong> {latestImportantNotice.message}
-                  </p>
+                  <div className="space-y-0.5">
+                    <p
+                      className={`text-base sm:text-lg font-extrabold leading-snug ${
+                        unreadNoticesForUser.length > 0
+                          ? 'text-white'
+                          : 'text-[#1F122B] dark:text-[#F5EEF9]'
+                      }`}
+                    >
+                      {latestImportantNotice.title}
+                    </p>
+                    <p
+                      className={`text-xs sm:text-sm leading-relaxed ${
+                        unreadNoticesForUser.length > 0
+                          ? 'text-white/95'
+                          : 'text-[#3B2A48] dark:text-[#DFD0EC]'
+                      }`}
+                    >
+                      {latestImportantNotice.message}
+                    </p>
+                  </div>
                 ) : (
-                  <p className="text-xs text-[#5A4A66] dark:text-[#C5B4D4]">
-                    Important announcements from Tr Hein will appear visibly right here.
+                  <p className="text-xs sm:text-sm text-[#5A4A66] dark:text-[#C5B4D4]">
+                    Important notices from Tr Hein will appear right here with a notification sound.
                   </p>
                 )}
               </div>
             </div>
 
             <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={handleToggleSound}
+                title={soundEnabled ? 'Notification sound is ON (click to mute)' : 'Sound muted (click to turn ON & test)'}
+                className={`min-h-[40px] inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap ${
+                  latestImportantNotice && unreadNoticesForUser.length > 0
+                    ? 'bg-white/15 hover:bg-white/25 text-white border border-white/25'
+                    : 'bg-white dark:bg-[#1F1629] border border-[#E5D9EC] dark:border-[#332442] text-[#3B1050] dark:text-[#E8D5F5]'
+                }`}
+              >
+                {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+                {soundEnabled ? 'Sound On' : 'Muted'}
+              </button>
               {latestImportantNotice?.targetTab && (
                 <button
                   type="button"
                   onClick={() => handleJump(latestImportantNotice)}
-                  className={`min-h-[36px] inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap ${
+                  className={`min-h-[40px] inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap ${
                     unreadNoticesForUser.length > 0
                       ? 'bg-white text-[#3B1050] hover:bg-[#F4EEF7]'
                       : 'bg-[#3B1050] text-white hover:bg-[#4E1869]'
@@ -452,14 +636,19 @@ export function NotificationBar({ onSelectTab }: NotificationBarProps) {
               )}
               <button
                 type="button"
-                onClick={() => setDrawerOpen(true)}
-                className={`min-h-[36px] inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap ${
+                onClick={() => {
+                  if (publicNotices.length > 0) {
+                    markLocalSeen(publicNotices.map((n) => n.id));
+                  }
+                  setDrawerOpen(true);
+                }}
+                className={`min-h-[40px] inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap ${
                   latestImportantNotice && unreadNoticesForUser.length > 0
                     ? 'bg-white/15 hover:bg-white/25 text-white border border-white/25'
                     : 'bg-[#F4EEF7] dark:bg-[#2A1D38] text-[#3B1050] dark:text-[#E8D5F5]'
                 }`}
               >
-                <Bell className="w-3.5 h-3.5" />
+                <Bell className="w-4 h-4" />
                 All notices ({publicNotices.length})
               </button>
             </div>
@@ -487,8 +676,8 @@ export function NotificationBar({ onSelectTab }: NotificationBarProps) {
                   </h2>
                   <p className="text-[11px] text-[#5A4A66] dark:text-[#BBAAC9]">
                     {isAdmin
-                      ? 'Live teacher alerts (surveys, 1-to-1 bookings, FAQs) and notices sent to teachers'
-                      : 'Visible updates and reminders from Tr Hein Tay Za'}
+                      ? 'Live teacher alerts with chime sound + big notices displayed across the Hub'
+                      : 'Important updates and reminders from Tr Hein Tay Za'}
                   </p>
                 </div>
               </div>
@@ -566,7 +755,7 @@ export function NotificationBar({ onSelectTab }: NotificationBarProps) {
                   className="rounded-xl bg-[#FAF7FC] dark:bg-[#160F1F] border border-[#A8567F]/40 p-4 space-y-3"
                 >
                   <p className="text-xs font-bold text-[#3B1050] dark:text-[#E8D5F5]">
-                    Send Important Notice (appears in the top notification bar for everyone)
+                    Send Big Notice on the Hub (pops up live with a chime sound for teachers)
                   </p>
                   <input
                     type="text"
@@ -600,7 +789,7 @@ export function NotificationBar({ onSelectTab }: NotificationBarProps) {
                       onChange={(e) => setNPriority(e.target.value as 'important' | 'normal')}
                       className="min-h-[40px] px-2.5 py-1.5 rounded-xl border border-[#E5D9EC] dark:border-[#332442] bg-white dark:bg-[#1F1629] text-xs"
                     >
-                      <option value="important">Priority: Important (Highlighted)</option>
+                      <option value="important">Priority: Important (Big Banner + Sound)</option>
                       <option value="normal">Priority: Standard Notice</option>
                     </select>
                     <select
@@ -616,57 +805,10 @@ export function NotificationBar({ onSelectTab }: NotificationBarProps) {
                       <option value="roadmap">Link to: 6-Month Roadmap</option>
                     </select>
                   </div>
-                  {/* Registered email recipients preview + optional extra emails */}
-                  <div className="rounded-xl bg-white dark:bg-[#1F1629] border border-[#E5D9EC] dark:border-[#332442] p-3 space-y-2">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="text-[11px] font-semibold text-[#3B1050] dark:text-[#E8D5F5] flex items-center gap-1.5">
-                        <Mail className="w-3.5 h-3.5 text-[#A8567F]" />
-                        Email recipients ({composerRecipients.length})
-                      </span>
-                      <label className="inline-flex items-center gap-1.5 text-[11px] text-[#5A4A66] dark:text-[#BBAAC9] cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={includeSelfCopy}
-                          onChange={(e) => setIncludeSelfCopy(e.target.checked)}
-                          className="rounded border-[#C9B3D9]"
-                        />
-                        Send a copy to my own email
-                      </label>
-                    </div>
 
-                    {composerRecipients.length > 0 ? (
-                      <div className="flex flex-wrap gap-1.5 max-h-20 overflow-y-auto">
-                        {composerRecipients.map((email) => (
-                          <span
-                            key={email}
-                            className="px-2 py-0.5 rounded-md bg-[#FAF7FC] dark:bg-[#160F1F] border border-[#E5D9EC] dark:border-[#332442] text-[11px] text-[#3B1050] dark:text-[#E8D5F5]"
-                          >
-                            {email}
-                          </span>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-[11px] text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 rounded-lg px-2.5 py-1.5">
-                        No registered teacher emails found yet. Add teacher emails in{' '}
-                        <strong>Admin Dashboard → Edit Access &amp; Special Roles</strong>, or type
-                        recipient email(s) below.
-                      </p>
-                    )}
-
-                    <input
-                      type="text"
-                      value={extraRecipientsText}
-                      onChange={(e) => setExtraRecipientsText(e.target.value)}
-                      placeholder="Optional extra email(s), separated by commas (e.g., teacher@gmail.com)"
-                      className="w-full min-h-[36px] px-2.5 py-1.5 rounded-lg border border-[#E5D9EC] dark:border-[#332442] bg-[#FAF7FC] dark:bg-[#160F1F] text-xs"
-                    />
-                  </div>
-
-                  <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                     <span className="text-[11px] text-[#5A4A66] dark:text-[#BBAAC9]">
-                      {composerRecipients.length > 0
-                        ? `Publishing shows the notice on-site and opens Gmail confirmation for ${composerRecipients.length} email(s).`
-                        : 'Notice will appear on-site. Add recipient emails above to send via Gmail too.'}
+                      Appears live in the big notification banner &amp; chimes immediately for online teachers.
                     </span>
                     <div className="flex items-center gap-2">
                       <button
@@ -682,11 +824,7 @@ export function NotificationBar({ onSelectTab }: NotificationBarProps) {
                         className="min-h-[38px] inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-[#A8567F] hover:bg-[#91446A] text-white text-xs font-semibold disabled:opacity-50"
                       >
                         <Send className="w-3.5 h-3.5" />
-                        {publishing
-                          ? 'Publishing...'
-                          : composerRecipients.length > 0
-                            ? `Publish & Email (${composerRecipients.length})`
-                            : 'Publish Notice'}
+                        {publishing ? 'Publishing...' : 'Publish Big Notice'}
                       </button>
                     </div>
                   </div>
@@ -699,7 +837,7 @@ export function NotificationBar({ onSelectTab }: NotificationBarProps) {
                   <p className="text-sm text-[#5A4A66] dark:text-[#BBAAC9] text-center py-8">
                     No teacher alerts yet. Whenever a teacher submits the Needs Survey, books a
                     1-to-1 meeting, asks an FAQ question, or suggests a resource, it will appear
-                    right here in real time.
+                    right here with a live chime sound.
                   </p>
                 ) : (
                   <div className="space-y-2.5">
@@ -790,7 +928,7 @@ export function NotificationBar({ onSelectTab }: NotificationBarProps) {
                   {publicNotices.length === 0 ? (
                     <p className="text-sm text-[#5A4A66] dark:text-[#BBAAC9] text-center py-8">
                       {isAdmin
-                        ? 'No notices posted yet. Click "New notice" above to display an Important Notice across the top of the website for teachers and viewers.'
+                        ? 'No notices posted yet. Click "New notice" above to display a big notice across the top of the website for teachers and viewers.'
                         : 'No important notices from Tr Hein right now.'}
                     </p>
                   ) : (
@@ -869,13 +1007,16 @@ export function NotificationBar({ onSelectTab }: NotificationBarProps) {
                                         n.title,
                                         n.message,
                                         n.audience as 'all' | 'teachers',
-                                        n.priority
+                                        n.priority,
+                                        composerRecipients.length > 0
+                                          ? composerRecipients
+                                          : getRegisteredEmailsForAudience(n.audience as 'all' | 'teachers')
                                       )
                                     }
                                     className="min-h-[34px] inline-flex items-center gap-1.5 px-3 py-1 rounded-lg border border-[#E5D9EC] dark:border-[#332442] text-xs font-semibold text-[#3B1050] dark:text-[#E8D5F5] hover:border-[#A8567F]"
                                   >
                                     <Mail className="w-3.5 h-3.5 text-[#A8567F]" />
-                                    Email registered ({getRegisteredEmailsForAudience(n.audience).length})
+                                    Open in Email App ({getRegisteredEmailsForAudience(n.audience).length})
                                   </button>
                                 )}
                             </div>
