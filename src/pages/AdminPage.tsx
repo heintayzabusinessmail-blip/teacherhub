@@ -38,7 +38,12 @@ import {
 import { useHub } from '../context/HubContext';
 import { ADMIN_TARGETS, PAGE_SUMMARIES } from '../content/planContent';
 import { PageHeader } from '../components/PageHeader';
-import { formatLocalDateTime } from '../utils/helpers';
+import {
+  formatLocalDateTime,
+  isoToMyanmarInput,
+  MYANMAR_TIME_LABEL,
+  myanmarInputToIso,
+} from '../utils/helpers';
 import { downloadMonth1ReportPdf } from '../utils/pdfExport';
 import { clearAllSampleData, seedFictionalSampleData } from '../utils/seedData';
 import type { ObservationDoc, UserRole } from '../types';
@@ -82,20 +87,20 @@ export function AdminPage() {
   const [newRole, setNewRole] = useState<UserRole>('teacher');
   const [savingAllow, setSavingAllow] = useState(false);
 
-  // 1-to-1 Slot form
+  // 1-to-1 Slot form (Myanmar Time · MMT)
   const [slotLabel, setSlotLabel] = useState('Week 1 Welcome 1-to-1 (with Tr Hein)');
-  const [slotDateTime, setSlotDateTime] = useState(
-    new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 16)
+  const [slotDateTime, setSlotDateTime] = useState(() =>
+    isoToMyanmarInput(new Date(Date.now() + 2 * 86400000))
   );
   const [slotDuration, setSlotDuration] = useState(20);
   const [savingSlot, setSavingSlot] = useState(false);
 
-  // Observation form
+  // Observation form (Myanmar Time · MMT)
   const [obsEmail, setObsEmail] = useState('');
   const [obsName, setObsName] = useState('');
   const [obsClass, setObsClass] = useState('B1 Group');
-  const [obsDate, setObsDate] = useState(
-    new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 16)
+  const [obsDate, setObsDate] = useState(() =>
+    isoToMyanmarInput(new Date(Date.now() + 7 * 86400000))
   );
   const [editingObs, setEditingObs] = useState<ObservationDoc | null>(null);
   const [fbWorked, setFbWorked] = useState('');
@@ -234,7 +239,7 @@ export function AdminPage() {
     try {
       const now = serverTimestamp();
       await addDoc(collection(db, 'oneToOneSlots'), {
-        dateTimeIso: new Date(slotDateTime).toISOString(),
+        dateTimeIso: myanmarInputToIso(slotDateTime),
         durationMins: Math.max(10, Math.min(90, Number(slotDuration) || 20)),
         label: slotLabel.trim().slice(0, 120) || '1-to-1 Welcome Meeting',
         bookedByUid: '',
@@ -270,7 +275,7 @@ export function AdminPage() {
           120
         ),
         levelClass: obsClass.trim().slice(0, 100),
-        plannedDateIso: new Date(obsDate).toISOString(),
+        plannedDateIso: myanmarInputToIso(obsDate),
         status: 'scheduled',
         purposeNote: 'Purpose: see where we are now and what you need. Not a test.',
         whatWorked: '',
@@ -931,10 +936,11 @@ export function AdminPage() {
               Edit Access & Special Roles
             </h2>
             <p className="text-xs text-[#5A4A66] dark:text-[#BBAAC9] mt-1">
-              Any Gmail account can automatically sign in as a Teacher (complete their profile,
-              submit surveys, RSVP, book 1-to-1s, and send feedback). Only your owner account (
-              {BOOTSTRAPPED_ADMIN_EMAIL}) can edit hub content by default. Add an email below to
-              grant Editor / Admin access or restrict someone to View Only.
+              Anyone signing in with Gmail gets <strong>View-Only</strong> access by default (cannot
+              touch or submit anything). Add a teacher’s email below to grant{' '}
+              <strong>Teacher</strong> access (surveys, profile, RSVPs, 1-to-1 bookings, and
+              feedback). Only your owner account ({BOOTSTRAPPED_ADMIN_EMAIL}) can edit hub content
+              by default.
             </p>
           </div>
 
@@ -998,8 +1004,8 @@ export function AdminPage() {
                       colSpan={isPrimaryOwner ? 4 : 3}
                       className="py-6 text-center text-xs text-[#5A4A66] dark:text-[#BBAAC9]"
                     >
-                      No special roles added yet. Any Gmail account can join as a Teacher and
-                      submit forms/surveys; only your owner account can currently edit hub content.
+                      No teacher emails added yet. Anyone who signs in currently has View-Only
+                      access; add a teacher’s email above to let them submit forms and surveys.
                     </td>
                   </tr>
                 ) : (
@@ -1065,10 +1071,15 @@ export function AdminPage() {
       {/* TAB 3: One-to-One Slots */}
       {subTab === 'slots' && (
         <section className="bg-white dark:bg-[#1F1629] rounded-2xl border border-[#E5D9EC] dark:border-[#332442] p-5 sm:p-6 shadow-sm space-y-5">
-          <h2 className="text-lg font-bold text-[#1F122B] dark:text-[#F5EEF9] flex items-center gap-2">
-            <CalendarPlus className="w-5 h-5 text-[#A8567F]" />
-            Manage 1-to-1 Meeting Slots
-          </h2>
+          <div>
+            <h2 className="text-lg font-bold text-[#1F122B] dark:text-[#F5EEF9] flex items-center gap-2">
+              <CalendarPlus className="w-5 h-5 text-[#A8567F]" />
+              Manage 1-to-1 Meeting Slots
+            </h2>
+            <p className="text-xs text-[#5A4A66] dark:text-[#BBAAC9] mt-0.5">
+              All dates and times are scheduled and displayed in <strong>{MYANMAR_TIME_LABEL}</strong>.
+            </p>
+          </div>
 
           <form onSubmit={handleAddSlot} className="grid sm:grid-cols-12 gap-2.5">
             <input
@@ -1152,6 +1163,7 @@ export function AdminPage() {
             </h2>
             <p className="text-xs text-[#5A4A66] dark:text-[#BBAAC9]">
               Every observation record is strictly private to that teacher, Tr Hein, and the Founder.
+              Dates and times use <strong>{MYANMAR_TIME_LABEL}</strong>.
             </p>
           </div>
 

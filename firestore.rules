@@ -54,10 +54,11 @@ service cloud.firestore {
     }
 
     function isInteractiveUser() {
-      return isVerified()
-        && !(
-          exists(/databases/$(database)/documents/allowlist/$(myEmailKey()))
-          && get(/databases/$(database)/documents/allowlist/$(myEmailKey())).data.role == 'viewer'
+      return isAdmin()
+        || (
+          isVerified()
+          && exists(/databases/$(database)/documents/allowlist/$(myEmailKey()))
+          && get(/databases/$(database)/documents/allowlist/$(myEmailKey())).data.role == 'teacher'
         );
     }
 

@@ -34,6 +34,8 @@ import {
   getEmbedPreviewUrl,
   getGoogleCalendarUrl,
   getViewerTimeZone,
+  isoToMyanmarInput,
+  myanmarInputToIso,
 } from '../utils/helpers';
 import type { TrainingSession } from '../types';
 
@@ -111,7 +113,7 @@ export function TrainingPage() {
       setEditingSession(session);
       setSTitle(session.title);
       setSMonth(session.month);
-      setSDateTime(session.dateTimeIso.slice(0, 16));
+      setSDateTime(isoToMyanmarInput(session.dateTimeIso));
       setSDuration(session.durationMins);
       setSPresenter(session.presenter);
       setSTopic(session.topic);
@@ -124,7 +126,7 @@ export function TrainingPage() {
       setEditingSession(null);
       setSTitle('');
       setSMonth(1);
-      setSDateTime(new Date(Date.now() + 5 * 86400000).toISOString().slice(0, 16));
+      setSDateTime(isoToMyanmarInput(new Date(Date.now() + 5 * 86400000)));
       setSDuration(60);
       setSPresenter('Tr Hein Tay Za');
       setSTopic('');
@@ -142,7 +144,7 @@ export function TrainingPage() {
     if (!sTitle.trim() || !sDateTime) return;
     setSavingSession(true);
     try {
-      const iso = new Date(sDateTime).toISOString();
+      const iso = myanmarInputToIso(sDateTime);
       const now = serverTimestamp();
       if (editingSession) {
         await updateDoc(doc(db, 'trainingSessions', editingSession.id), {
@@ -670,7 +672,9 @@ export function TrainingPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold mb-1">Date & time *</label>
+                  <label className="block text-xs font-semibold mb-1">
+                    Date & time (Myanmar Time · MMT) *
+                  </label>
                   <input
                     type="datetime-local"
                     required

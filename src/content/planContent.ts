@@ -28,7 +28,7 @@ export const PAGE_SUMMARIES = {
   training: 'In short: Join our twice-monthly training workshops, RSVP in one click, and share a short weekly reflection.',
   myMonth1: 'In short: Track your personal Month 1 checklist, book your 1-to-1 chat, and read your private observation notes.',
   voice: 'In short: Tell Tr Hein what support helps you most, search hard student questions, or send an anonymous idea.',
-  tools: 'In short: Copy ready-made YAO forms for lesson planning, observations, syllabus tracking, and feedback meetings.',
+  tools: 'In short: Copy ready-made YAO forms for lesson planning, observations, and syllabus tracking.',
   goodPractice: 'In short: See the simple, proven ideas from international English schools that guide how YAO supports teachers.',
   admin: 'In short: Manage the teacher allowlist, review Month 1 team progress, approve resources, and print your one-page report.',
 };
@@ -668,28 +668,6 @@ Week 1 | Planned: Unit 1A–1B (Character & Present Perfect) | Completed: Unit 1
 Week 2 | Planned: Unit 1C–1D (Everyday English & Review) | Completed: Unit 1C | Status: 1 lesson behind | Notes: Needed extra 20 mins on listening audio; will catch up in Week 3 warm-up.
 Week 3 | Planned: Unit 2A–2B (Survival & Narrative Tenses) | Completed: Planned | Status: Ready | Materials gap: Need cleaner B2 audio clip for p.22 (reported to Tr Hein).
 Week 4 | Planned: Unit 2C + Mini Progress Check | Completed: Planned | Status: Ready | Assessment: 15-min speaking pair check using YAO rubric.`,
-  },
-  {
-    id: 'feedback-script',
-    title: 'Feedback Meeting Script (5 Steps)',
-    purpose: 'The exact 5-step structure Tr Hein uses in every private post-observation chat.',
-    templateText: `YAO ENGLISH — 5-STEP DEVELOPMENTAL FEEDBACK SCRIPT
-Duration: 15–20 minutes | Private 1-to-1 | Within 2 days of observation
-
-STEP 1 — LISTEN FIRST (4 mins)
-"Thank you for welcoming me into your class! Before I share my notes, how did the lesson feel to you? What are you happiest with, and was there any moment that felt tricky?"
-
-STEP 2 — SHARE SPECIFIC EXAMPLES (4 mins)
-"Here are two moments that really helped your students learn: [exact example 1] and [exact example 2]. And here is one moment where we can make things even smoother: [neutral, specific example]."
-
-STEP 3 — AGREE 1 OR 2 CHANGES (4 mins)
-"If we pick just ONE (or at most two) small changes to try over the next two weeks, what feels most useful for your class?"
-
-STEP 4 — AGREE SUPPORT (3 mins)
-"How can I help make this easy for you? Would you like a sample slide, a 10-minute co-planning chat, or a quick demo?"
-
-STEP 5 — SET REVIEW DATE (2 mins)
-"Let’s check in on [Date] to see how it went and celebrate what improved. Thank you again!"`,
   },
 ];
 

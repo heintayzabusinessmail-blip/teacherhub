@@ -1,34 +1,70 @@
+export const MYANMAR_TIME_ZONE = 'Asia/Yangon';
+export const MYANMAR_TIME_LABEL = 'Myanmar Time (MMT, UTC+06:30)';
+
 export function formatLocalDateTime(iso: string): string {
   if (!iso) return 'Date to be confirmed';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return new Intl.DateTimeFormat(undefined, {
+  const formatted = new Intl.DateTimeFormat('en-GB', {
     weekday: 'short',
     day: 'numeric',
     month: 'short',
     hour: '2-digit',
     minute: '2-digit',
-    timeZoneName: 'short',
+    hour12: true,
+    timeZone: MYANMAR_TIME_ZONE,
   }).format(d);
+  return `${formatted} MMT`;
 }
 
 export function formatShortDate(iso: string): string {
   if (!iso) return 'TBC';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat('en-GB', {
     day: 'numeric',
     month: 'short',
     year: 'numeric',
+    timeZone: MYANMAR_TIME_ZONE,
   }).format(d);
 }
 
 export function getViewerTimeZone(): string {
-  try {
-    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'Local time';
-  } catch {
-    return 'Local time';
+  return MYANMAR_TIME_LABEL;
+}
+
+/**
+ * Converts an ISO timestamp (or Date) into a YYYY-MM-DDTHH:mm string in Myanmar Time (UTC+06:30)
+ * for <input type="datetime-local" /> controls.
+ */
+export function isoToMyanmarInput(isoOrDate: string | Date): string {
+  const d = typeof isoOrDate === 'string' ? new Date(isoOrDate) : isoOrDate;
+  if (Number.isNaN(d.getTime())) return '';
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: MYANMAR_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(d);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value || '00';
+  const hour = get('hour') === '24' ? '00' : get('hour');
+  return `${get('year')}-${get('month')}-${get('day')}T${hour}:${get('minute')}`;
+}
+
+/**
+ * Converts a YYYY-MM-DDTHH:mm value picked in Myanmar Time (UTC+06:30) into a UTC ISO string.
+ */
+export function myanmarInputToIso(dateTimeLocal: string): string {
+  if (!dateTimeLocal) return '';
+  const clean = dateTimeLocal.trim().slice(0, 16);
+  const parsed = new Date(`${clean}:00+06:30`);
+  if (Number.isNaN(parsed.getTime())) {
+    return new Date(dateTimeLocal).toISOString();
   }
+  return parsed.toISOString();
 }
 
 export function getEmbedPreviewUrl(url: string): { kind: 'iframe' | 'none'; src: string } {
@@ -228,6 +264,7 @@ export function getGoogleCalendarUrl(event: CalendarEventInput): string {
     dates: `${toIcsUtcTimestamp(start)}/${toIcsUtcTimestamp(end)}`,
     details: event.description || 'YAO English Teacher Hub event',
     location: event.location || 'Zoom / Online',
+    ctz: MYANMAR_TIME_ZONE,
   });
   return `https://calendar.google.com/calendar/render?${params.toString()}`;
 }
