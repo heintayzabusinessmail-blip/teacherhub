@@ -15,6 +15,7 @@ import { useHub } from '../context/HubContext';
 import { PAGE_SUMMARIES } from '../content/planContent';
 import { PageHeader } from '../components/PageHeader';
 import { compressImageFileToDataUrl, getInitials } from '../utils/helpers';
+import { getMissingTeacherProfileFields } from '../utils/profileValidation';
 
 const LEVEL_OPTIONS = ['Pre-A1 / A1', 'A2', 'B1', 'B2', 'C1', 'IELTS', 'One-to-One', 'Business English', 'Young Learners'];
 
@@ -35,6 +36,7 @@ export function TeamPage() {
   const [eWantHelp, setEWantHelp] = useState('');
   const [eFunFact, setEFunFact] = useState('');
   const [eFavActivity, setEFavActivity] = useState('');
+  const [editError, setEditError] = useState('');
   const [savingProfile, setSavingProfile] = useState(false);
 
   // Say Hello Modal
@@ -85,6 +87,7 @@ export function TeamPage() {
     setEWantHelp(myProfile.wantHelpWith || '');
     setEFunFact(myProfile.funFact || '');
     setEFavActivity(myProfile.favouriteActivity || '');
+    setEditError('');
     setEditingMyCard(true);
   };
 
@@ -99,9 +102,30 @@ export function TeamPage() {
     }
   };
 
+  const editMissingFields = useMemo(
+    () =>
+      getMissingTeacherProfileFields({
+        displayName: eName,
+        languages: eLanguages,
+        yearsTeaching: eYears,
+        levels: eLevels,
+        classesTaught: eClasses,
+        goodAt: eGoodAt,
+        wantHelpWith: eWantHelp,
+        funFact: eFunFact,
+        favouriteActivity: eFavActivity,
+      }),
+    [eName, eLanguages, eYears, eLevels, eClasses, eGoodAt, eWantHelp, eFunFact, eFavActivity]
+  );
+
   const handleSaveMyCard = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !myProfile || !canInteract) return;
+    if (!isAdmin && editMissingFields.length > 0) {
+      setEditError(`Please fill in all required fields: ${editMissingFields.join(', ')}.`);
+      return;
+    }
+    setEditError('');
     setSavingProfile(true);
     try {
       await updateDoc(doc(db, 'teachers', user.uid), {
@@ -759,6 +783,10 @@ export function TeamPage() {
               </div>
             </div>
 
+            {editError && (
+              <p className="text-xs font-semibold text-red-600 dark:text-red-400">{editError}</p>
+            )}
+
             <div className="flex justify-end gap-2 pt-2">
               <button
                 type="button"
@@ -769,8 +797,8 @@ export function TeamPage() {
               </button>
               <button
                 type="submit"
-                disabled={savingProfile}
-                className="min-h-[42px] px-5 py-2 rounded-xl bg-[#3B1050] hover:bg-[#4E1869] text-white text-xs font-semibold"
+                disabled={savingProfile || (!isAdmin && editMissingFields.length > 0)}
+                className="min-h-[42px] px-5 py-2 rounded-xl bg-[#3B1050] hover:bg-[#4E1869] text-white text-xs font-semibold disabled:opacity-45 disabled:cursor-not-allowed"
               >
                 {savingProfile ? 'Saving...' : 'Save changes'}
               </button>

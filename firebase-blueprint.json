@@ -458,6 +458,8 @@
             "meeting_cancelled",
             "weekly_feedback",
             "weekly_meeting_vote",
+            "meeting_agenda",
+            "lesson_plan_submitted",
             "faq_asked",
             "resource_suggested",
             "admin_notice"
@@ -529,6 +531,122 @@
         "selectedOption",
         "suggestedTime",
         "note",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "WeeklyMeetingInfo": {
+      "title": "WeeklyMeetingInfo",
+      "description": "Admin-managed Zoom link, confirmed Sunday MMT time, and latest takeaways for the Weekly Academic Team Meeting with Tr YAO.",
+      "type": "object",
+      "properties": {
+        "confirmedSlot": { "type": "string", "enum": ["sun_3_4_pm", "sun_5_6_pm", "custom"] },
+        "customTimeLabel": { "type": "string", "maxLength": 160 },
+        "zoomLink": { "type": "string", "maxLength": 500 },
+        "meetingDateLabel": { "type": "string", "maxLength": 120 },
+        "latestNotes": { "type": "string", "maxLength": 2500 },
+        "updatedBy": { "type": "string", "maxLength": 120 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "confirmedSlot",
+        "customTimeLabel",
+        "zoomLink",
+        "meetingDateLabel",
+        "latestNotes",
+        "updatedBy",
+        "updatedAt"
+      ]
+    },
+    "MeetingAgendaItem": {
+      "title": "MeetingAgendaItem",
+      "description": "One-line agenda topic added by teachers or admins ahead of the Weekly Academic Team Meeting.",
+      "type": "object",
+      "properties": {
+        "authorUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "authorName": { "type": "string", "maxLength": 120 },
+        "topic": { "type": "string", "maxLength": 300 },
+        "details": { "type": "string", "maxLength": 600 },
+        "status": { "type": "string", "enum": ["open", "discussed"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["authorUid", "authorName", "topic", "details", "status", "createdAt", "updatedAt"]
+    },
+    "WelcomePackItem": {
+      "title": "WelcomePackItem",
+      "description": "Orientation video or guide inside the New Teacher Welcome Pack (Job #1 · Week 3).",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "maxLength": 160 },
+        "category": { "type": "string", "enum": ["organisation", "academic", "zoom_tools", "curriculum"] },
+        "description": { "type": "string", "maxLength": 500 },
+        "mediaUrl": { "type": "string", "maxLength": 600 },
+        "durationLabel": { "type": "string", "maxLength": 40 },
+        "order": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "category", "description", "mediaUrl", "durationLabel", "order", "createdAt", "updatedAt"]
+    },
+    "WelcomeProgress": {
+      "title": "WelcomeProgress",
+      "description": "Per-teacher New Teacher Welcome Pack & Zoom readiness checklist stored under the teacher's profile.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "teacherName": { "type": "string", "maxLength": 120 },
+        "watchedOrientation": { "type": "boolean" },
+        "reviewedCoursebook": { "type": "boolean" },
+        "zoomScreenShareReady": { "type": "boolean" },
+        "zoomAudioShareReady": { "type": "boolean" },
+        "zoomBreakoutRoomsReady": { "type": "boolean" },
+        "practiceLessonDone": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "uid",
+        "teacherName",
+        "watchedOrientation",
+        "reviewedCoursebook",
+        "zoomScreenShareReady",
+        "zoomAudioShareReady",
+        "zoomBreakoutRoomsReady",
+        "practiceLessonDone",
+        "updatedAt"
+      ]
+    },
+    "LessonPlanSubmission": {
+      "title": "LessonPlanSubmission",
+      "description": "Teacher weekly lesson plan submission and quick supportive coordinator feedback (Job #3).",
+      "type": "object",
+      "properties": {
+        "teacherUid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "teacherName": { "type": "string", "maxLength": 120 },
+        "level": { "type": "string", "maxLength": 40 },
+        "className": { "type": "string", "maxLength": 120 },
+        "weekLabel": { "type": "string", "maxLength": 60 },
+        "lessonObjective": { "type": "string", "maxLength": 400 },
+        "stagesSummary": { "type": "string", "maxLength": 2000 },
+        "planUrl": { "type": "string", "maxLength": 600 },
+        "status": { "type": "string", "enum": ["submitted", "reviewed"] },
+        "coordinatorFeedback": { "type": "string", "maxLength": 1200 },
+        "reviewedBy": { "type": "string", "maxLength": 120 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "teacherUid",
+        "teacherName",
+        "level",
+        "className",
+        "weekLabel",
+        "lessonObjective",
+        "stagesSummary",
+        "planUrl",
+        "status",
+        "coordinatorFeedback",
+        "reviewedBy",
         "createdAt",
         "updatedAt"
       ]
@@ -614,6 +732,26 @@
     "/notifications/{notifId}": {
       "schema": { "$ref": "#/entities/HubNotification" },
       "description": "Owner/Admin alerts from teacher submissions and visible Important Notices from Admin for teachers and viewers."
+    },
+    "/weeklyMeetingInfo/{infoId}": {
+      "schema": { "$ref": "#/entities/WeeklyMeetingInfo" },
+      "description": "Admin-managed Zoom link, confirmed Sunday MMT time, and meeting takeaways for the Weekly Academic Team Meeting."
+    },
+    "/meetingAgendaItems/{itemId}": {
+      "schema": { "$ref": "#/entities/MeetingAgendaItem" },
+      "description": "Shared teacher/admin 1-line agenda items for the Weekly Academic Team Meeting."
+    },
+    "/welcomePackItems/{itemId}": {
+      "schema": { "$ref": "#/entities/WelcomePackItem" },
+      "description": "Orientation videos and guides in the New Teacher Welcome Pack."
+    },
+    "/teachers/{uid}/welcomeProgress/{docId}": {
+      "schema": { "$ref": "#/entities/WelcomeProgress" },
+      "description": "Private Zoom readiness and Welcome Pack completion checklist under each teacher's profile."
+    },
+    "/lessonPlans/{planId}": {
+      "schema": { "$ref": "#/entities/LessonPlanSubmission" },
+      "description": "Private weekly lesson plan submissions and coordinator feedback per teacher."
     }
   }
 }

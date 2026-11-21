@@ -18,10 +18,12 @@ import { GoodPracticePage } from './pages/GoodPracticePage';
 import { AdminPage } from './pages/AdminPage';
 import { BRAND } from './content/planContent';
 import { signOutUser } from './firebase';
+import { isTeacherProfileComplete } from './utils/profileValidation';
 import type { NavTab } from './types';
 
 function HubRouter() {
-  const { user, authLoading, isAllowed, isViewer, myProfile, profileLoaded, syncError } = useHub();
+  const { user, authLoading, isAllowed, isAdmin, isViewer, myProfile, profileLoaded, syncError } =
+    useHub();
   const [activeTab, setActiveTab] = useState<NavTab>('home');
 
   if (syncError) {
@@ -76,8 +78,12 @@ function HubRouter() {
     );
   }
 
-  // First-login 2-minute onboarding for teachers/admins who have not created their team card yet (view-only users skip)
-  if (!isViewer && (!myProfile || !myProfile.onboardingComplete)) {
+  // First-login / incomplete profile gate: teachers MUST fill all required card fields before entering the Hub
+  const needsOnboarding = isAdmin
+    ? !myProfile || !myProfile.onboardingComplete
+    : !isViewer && !isTeacherProfileComplete(myProfile);
+
+  if (needsOnboarding) {
     return <OnboardingModal />;
   }
 

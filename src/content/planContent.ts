@@ -26,10 +26,10 @@ export const PAGE_SUMMARIES = {
   team: 'In short: Get to know every YAO teacher, see who teaches which level, and say hello to your teammates.',
   resources: 'In short: Find, preview, bookmark, and save personal notes on every YAO coursebook, slide deck, and activity.',
   training: 'In short: Join our twice-monthly training workshops, RSVP in one click, and share a short weekly reflection.',
-  myMonth1: 'In short: Track your personal Month 1 checklist, submit weekly feedback or challenges, and read your private observation notes.',
-  meetings: 'In short: Vote on our Weekly Academic Team Meeting time with Tr YAO (Sunday 3–4 PM or 5–6 PM MMT, or suggest another time) and book your 1-to-1 welcome meeting.',
+  myMonth1: 'In short: Track your Month 1 checklist, complete your New Teacher Welcome Pack & Zoom readiness, submit weekly feedback, and read private observation notes.',
+  meetings: 'In short: Vote on our Weekly Academic Team Meeting time with Tr YAO (MMT), join via Zoom, add agenda topics, read takeaways, and book your 1-to-1 chat.',
   voice: 'In short: Tell Tr Hein what support helps you most, search hard student questions, or send an anonymous idea.',
-  tools: 'In short: Copy ready-made YAO forms for lesson planning, observations, and syllabus tracking.',
+  tools: 'In short: Submit your weekly lesson plan for quick supportive pointers from Tr Hein, or copy & download ready-made YAO forms.',
   goodPractice: 'In short: See the simple, proven ideas from international English schools that guide how YAO supports teachers.',
   admin: 'In short: Manage the teacher allowlist, review Month 1 team progress, approve resources, and print your one-page report.',
 };

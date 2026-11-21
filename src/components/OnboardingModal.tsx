@@ -1,33 +1,81 @@
-import React, { useState } from 'react';
-import { Camera, CheckCircle2, UserCheck } from 'lucide-react';
-import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from '../firebase';
+import React, { useMemo, useState } from 'react';
+import { AlertCircle, Camera, CheckCircle2, LogOut, UserCheck } from 'lucide-react';
+import { doc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
+import { db, handleFirestoreError, OperationType, signOutUser } from '../firebase';
 import { useHub } from '../context/HubContext';
 import { compressImageFileToDataUrl, getInitials } from '../utils/helpers';
+import { getMissingTeacherProfileFields, hasMeaningfulText } from '../utils/profileValidation';
 import { BRAND } from '../content/planContent';
 
-const LEVEL_OPTIONS = ['Pre-A1 / A1', 'A2', 'B1', 'B2', 'C1', 'IELTS', 'One-to-One', 'Business English', 'Young Learners'];
+const LEVEL_OPTIONS = [
+  'Pre-A1 / A1',
+  'A2',
+  'B1',
+  'B2',
+  'C1',
+  'IELTS',
+  'One-to-One',
+  'Business English',
+  'Young Learners',
+];
 
 export function OnboardingModal() {
-  const { user } = useHub();
-  const [displayName, setDisplayName] = useState(user?.displayName || '');
-  const [photoUrl, setPhotoUrl] = useState(user?.photoURL || '');
-  const [levels, setLevels] = useState<string[]>(['B1']);
-  const [classesTaught, setClassesTaught] = useState('');
-  const [languages, setLanguages] = useState('Burmese, English');
-  const [yearsTeaching, setYearsTeaching] = useState<number>(2);
-  const [goodAt, setGoodAt] = useState('');
-  const [wantHelpWith, setWantHelpWith] = useState('');
-  const [funFact, setFunFact] = useState('');
-  const [favouriteActivity, setFavouriteActivity] = useState('');
+  const { user, myProfile } = useHub();
+
+  const [displayName, setDisplayName] = useState(
+    myProfile?.displayName || user?.displayName || ''
+  );
+  const [photoUrl, setPhotoUrl] = useState(myProfile?.photoUrl || user?.photoURL || '');
+  const [levels, setLevels] = useState<string[]>(myProfile?.levels || []);
+  const [classesTaught, setClassesTaught] = useState(myProfile?.classesTaught || '');
+  const [languages, setLanguages] = useState(myProfile?.languages || 'Burmese, English');
+  const [yearsTeaching, setYearsTeaching] = useState<string>(
+    myProfile?.yearsTeaching !== undefined ? String(myProfile.yearsTeaching) : ''
+  );
+  const [goodAt, setGoodAt] = useState(myProfile?.goodAt || '');
+  const [wantHelpWith, setWantHelpWith] = useState(myProfile?.wantHelpWith || '');
+  const [funFact, setFunFact] = useState(myProfile?.funFact || '');
+  const [favouriteActivity, setFavouriteActivity] = useState(myProfile?.favouriteActivity || '');
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+
+  const missingFields = useMemo(
+    () =>
+      getMissingTeacherProfileFields({
+        displayName,
+        languages,
+        yearsTeaching,
+        levels,
+        classesTaught,
+        goodAt,
+        wantHelpWith,
+        funFact,
+        favouriteActivity,
+      }),
+    [
+      displayName,
+      languages,
+      yearsTeaching,
+      levels,
+      classesTaught,
+      goodAt,
+      wantHelpWith,
+      funFact,
+      favouriteActivity,
+    ]
+  );
+
+  const isFormComplete = missingFields.length === 0;
 
   if (!user) return null;
 
   const toggleLevel = (lvl: string) => {
     setLevels((prev) =>
-      prev.includes(lvl) ? prev.filter((item) => item !== lvl) : prev.length < 10 ? [...prev, lvl] : prev
+      prev.includes(lvl)
+        ? prev.filter((item) => item !== lvl)
+        : prev.length < 10
+          ? [...prev, lvl]
+          : prev
     );
   };
 
@@ -45,22 +93,23 @@ export function OnboardingModal() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!displayName.trim()) {
-      setErrorMsg('Please enter your name so teammates recognise you.');
+    if (!isFormComplete) {
+      setErrorMsg(
+        `Please complete all required information before joining: ${missingFields.join(', ')}.`
+      );
       return;
     }
     setSaving(true);
     setErrorMsg('');
     try {
-      const now = serverTimestamp();
-      await setDoc(doc(db, 'teachers', user.uid), {
-        uid: user.uid,
+      const cleanYears = Math.max(0, Math.min(60, Number(yearsTeaching) || 0));
+      const payload = {
         displayName: displayName.trim().slice(0, 120),
         photoUrl: (photoUrl || '').slice(0, 150000),
         levels: levels.slice(0, 10),
         classesTaught: classesTaught.trim().slice(0, 200),
         languages: languages.trim().slice(0, 200),
-        yearsTeaching: Math.max(0, Math.min(60, Number(yearsTeaching) || 0)),
+        yearsTeaching: cleanYears,
         goodAt: goodAt.trim().slice(0, 300),
         wantHelpWith: wantHelpWith.trim().slice(0, 300),
         funFact: funFact.trim().slice(0, 300),
@@ -68,17 +117,30 @@ export function OnboardingModal() {
         onboardingComplete: true,
         checklist: {
           profileDone: true,
-          surveyDone: false,
-          oneToOneBooked: false,
-          observationScheduled: false,
-          trainingAttended: false,
+          surveyDone: myProfile?.checklist?.surveyDone ?? false,
+          oneToOneBooked: myProfile?.checklist?.oneToOneBooked ?? false,
+          observationScheduled: myProfile?.checklist?.observationScheduled ?? false,
+          trainingAttended: myProfile?.checklist?.trainingAttended ?? false,
         },
-        isSample: false,
-        createdAt: now,
-        updatedAt: now,
-      });
+        updatedAt: serverTimestamp(),
+      };
+
+      if (myProfile) {
+        await updateDoc(doc(db, 'teachers', user.uid), payload);
+      } else {
+        await setDoc(doc(db, 'teachers', user.uid), {
+          uid: user.uid,
+          ...payload,
+          isSample: false,
+          createdAt: serverTimestamp(),
+        });
+      }
     } catch (err) {
-      handleFirestoreError(err, OperationType.CREATE, `teachers/${user.uid}`);
+      handleFirestoreError(
+        err,
+        myProfile ? OperationType.UPDATE : OperationType.CREATE,
+        `teachers/${user.uid}`
+      );
     } finally {
       setSaving(false);
     }
@@ -90,23 +152,33 @@ export function OnboardingModal() {
         <div className="flex items-start justify-between gap-4 border-b border-[#E5D9EC] dark:border-[#332442] pb-5">
           <div className="space-y-1">
             <p className="text-xs font-semibold text-[#A8567F] dark:text-[#D98EB3]">
-              Quick 2-minute welcome setup
+              Required Teacher Profile Setup
             </p>
             <h1 className="text-2xl font-bold text-[#1F122B] dark:text-[#F5EEF9]">
               Welcome to the YAO Teacher Hub!
             </h1>
             <p className="text-sm text-[#5A4A66] dark:text-[#BBAAC9]">
-              In short: Confirm your name and share a quick “Get to know me” card so our team can
-              say hello. You can edit this anytime.
+              Please complete all required fields below so Tr Hein and teammates know your levels,
+              strengths, and support needs before joining the hub.
             </p>
           </div>
-          <div className="bg-white p-1.5 rounded-lg border border-[#E5D9EC] shrink-0">
-            <img
-              src={BRAND.logoPath}
-              alt="YAO English logo"
-              className="h-9 w-auto object-contain"
-              referrerPolicy="no-referrer"
-            />
+          <div className="flex flex-col items-end gap-2 shrink-0">
+            <div className="bg-white p-1.5 rounded-lg border border-[#E5D9EC]">
+              <img
+                src={BRAND.logoPath}
+                alt="YAO English logo"
+                className="h-9 w-auto object-contain"
+                referrerPolicy="no-referrer"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => signOutUser()}
+              className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#5A4A66] dark:text-[#BBAAC9] hover:text-red-600 dark:hover:text-red-400"
+            >
+              <LogOut className="w-3 h-3" />
+              Switch account
+            </button>
           </div>
         </div>
 
@@ -117,7 +189,7 @@ export function OnboardingModal() {
         )}
 
         <form onSubmit={handleSave} className="space-y-5">
-          {/* Name + optional photo */}
+          {/* Name + photo */}
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5">
             <div className="relative shrink-0">
               {photoUrl ? (
@@ -151,11 +223,12 @@ export function OnboardingModal() {
             <div className="flex-1 w-full space-y-3">
               <div>
                 <label className="block text-sm font-medium text-[#1F122B] dark:text-[#F5EEF9] mb-1">
-                  Your name (as you like teammates to call you) *
+                  Your name (as you like teammates to call you) <span className="text-rose-600">*</span>
                 </label>
                 <input
                   type="text"
                   required
+                  minLength={2}
                   maxLength={120}
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
@@ -166,10 +239,12 @@ export function OnboardingModal() {
               <div className="grid sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-[#1F122B] dark:text-[#F5EEF9] mb-1">
-                    Languages spoken
+                    Languages spoken <span className="text-rose-600">*</span>
                   </label>
                   <input
                     type="text"
+                    required
+                    minLength={2}
                     maxLength={200}
                     value={languages}
                     onChange={(e) => setLanguages(e.target.value)}
@@ -179,14 +254,16 @@ export function OnboardingModal() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-[#1F122B] dark:text-[#F5EEF9] mb-1">
-                    Years of teaching
+                    Years of teaching <span className="text-rose-600">*</span>
                   </label>
                   <input
                     type="number"
+                    required
                     min={0}
                     max={60}
                     value={yearsTeaching}
-                    onChange={(e) => setYearsTeaching(Number(e.target.value))}
+                    onChange={(e) => setYearsTeaching(e.target.value)}
+                    placeholder="e.g., 2"
                     className="w-full min-h-[44px] px-3.5 py-2 rounded-xl border border-[#E5D9EC] dark:border-[#332442] bg-[#FAF7FC] dark:bg-[#140D1A] text-sm tabular-nums"
                   />
                 </div>
@@ -197,7 +274,10 @@ export function OnboardingModal() {
           {/* Levels taught */}
           <div>
             <label className="block text-sm font-medium text-[#1F122B] dark:text-[#F5EEF9] mb-2">
-              Levels you teach at YAO
+              Levels you teach at YAO <span className="text-rose-600">*</span>{' '}
+              <span className="text-xs font-normal text-[#5A4A66] dark:text-[#BBAAC9]">
+                (select at least one)
+              </span>
             </label>
             <div className="flex flex-wrap gap-2">
               {LEVEL_OPTIONS.map((lvl) => {
@@ -222,10 +302,12 @@ export function OnboardingModal() {
 
           <div>
             <label className="block text-sm font-medium text-[#1F122B] dark:text-[#F5EEF9] mb-1">
-              Classes / groups you currently teach
+              Classes / groups you currently teach <span className="text-rose-600">*</span>
             </label>
             <input
               type="text"
+              required
+              minLength={3}
               maxLength={200}
               value={classesTaught}
               onChange={(e) => setClassesTaught(e.target.value)}
@@ -237,60 +319,105 @@ export function OnboardingModal() {
           <div className="grid sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-[#1F122B] dark:text-[#F5EEF9] mb-1">
-                I am good at...
+                I am good at... <span className="text-rose-600">*</span>
               </label>
               <textarea
                 rows={2}
+                required
+                minLength={5}
                 maxLength={300}
                 value={goodAt}
                 onChange={(e) => setGoodAt(e.target.value)}
                 placeholder="e.g., Making shy students feel comfortable speaking"
                 className="w-full px-3.5 py-2.5 rounded-xl border border-[#E5D9EC] dark:border-[#332442] bg-[#FAF7FC] dark:bg-[#140D1A] text-sm"
               />
+              {goodAt.trim().length > 0 && !hasMeaningfulText(goodAt, 5) && (
+                <p className="text-[11px] text-rose-600 dark:text-rose-400 mt-1">
+                  Please write a real short answer (at least 5 characters).
+                </p>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-[#1F122B] dark:text-[#F5EEF9] mb-1">
-                I would like help with...
+                I would like help with... <span className="text-rose-600">*</span>
               </label>
               <textarea
                 rows={2}
+                required
+                minLength={5}
                 maxLength={300}
                 value={wantHelpWith}
                 onChange={(e) => setWantHelpWith(e.target.value)}
                 placeholder="e.g., Faster grammar explanations or Zoom timing"
                 className="w-full px-3.5 py-2.5 rounded-xl border border-[#E5D9EC] dark:border-[#332442] bg-[#FAF7FC] dark:bg-[#140D1A] text-sm"
               />
+              {wantHelpWith.trim().length > 0 && !hasMeaningfulText(wantHelpWith, 5) && (
+                <p className="text-[11px] text-rose-600 dark:text-rose-400 mt-1">
+                  Please write a real short answer (at least 5 characters).
+                </p>
+              )}
             </div>
           </div>
 
           <div className="grid sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-[#1F122B] dark:text-[#F5EEF9] mb-1">
-                Fun fact about me
+                Fun fact about me <span className="text-rose-600">*</span>
               </label>
               <input
                 type="text"
+                required
+                minLength={5}
                 maxLength={300}
                 value={funFact}
                 onChange={(e) => setFunFact(e.target.value)}
                 placeholder="e.g., I drink 3 cups of tea a day"
                 className="w-full min-h-[44px] px-3.5 py-2 rounded-xl border border-[#E5D9EC] dark:border-[#332442] bg-[#FAF7FC] dark:bg-[#140D1A] text-sm"
               />
+              {funFact.trim().length > 0 && !hasMeaningfulText(funFact, 5) && (
+                <p className="text-[11px] text-rose-600 dark:text-rose-400 mt-1">
+                  Please write a real short fun fact (at least 5 characters).
+                </p>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-[#1F122B] dark:text-[#F5EEF9] mb-1">
-                Favourite classroom activity
+                Favourite classroom activity <span className="text-rose-600">*</span>
               </label>
               <input
                 type="text"
+                required
+                minLength={5}
                 maxLength={300}
                 value={favouriteActivity}
                 onChange={(e) => setFavouriteActivity(e.target.value)}
                 placeholder="e.g., Two Truths and One Lie"
                 className="w-full min-h-[44px] px-3.5 py-2 rounded-xl border border-[#E5D9EC] dark:border-[#332442] bg-[#FAF7FC] dark:bg-[#140D1A] text-sm"
               />
+              {favouriteActivity.trim().length > 0 &&
+                !hasMeaningfulText(favouriteActivity, 5) && (
+                  <p className="text-[11px] text-rose-600 dark:text-rose-400 mt-1">
+                    Please write a real classroom activity (at least 5 characters).
+                  </p>
+                )}
             </div>
           </div>
+
+          {/* Live Missing Fields Indicator */}
+          {!isFormComplete && (
+            <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 flex items-start gap-2.5 text-xs text-amber-900 dark:text-amber-200">
+              <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold">
+                  Complete {missingFields.length} remaining required{' '}
+                  {missingFields.length === 1 ? 'field' : 'fields'} to unlock Join YAO Teacher Hub:
+                </p>
+                <p className="mt-0.5 text-amber-800 dark:text-amber-300">
+                  {missingFields.join(' · ')}
+                </p>
+              </div>
+            </div>
+          )}
 
           <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <p className="text-xs text-[#5A4A66] dark:text-[#BBAAC9] flex items-center gap-1.5">
@@ -299,11 +426,11 @@ export function OnboardingModal() {
             </p>
             <button
               type="submit"
-              disabled={saving}
-              className="min-h-[48px] inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-[#3B1050] hover:bg-[#4E1869] text-white text-sm font-semibold transition-colors disabled:opacity-60"
+              disabled={saving || !isFormComplete}
+              className="min-h-[48px] inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-[#3B1050] hover:bg-[#4E1869] text-white text-sm font-semibold transition-colors disabled:opacity-45 disabled:cursor-not-allowed whitespace-nowrap"
             >
               <UserCheck className="w-4 h-4" />
-              {saving ? 'Saving profile...' : 'Enter YAO Teacher Hub'}
+              {saving ? 'Saving profile...' : 'Join YAO Teacher Hub'}
             </button>
           </div>
         </form>

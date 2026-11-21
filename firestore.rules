@@ -433,8 +433,8 @@ service cloud.firestore {
         && data.audience in ['admin', 'teachers', 'all']
         && data.category in [
           'survey_submitted', 'meeting_booked', 'meeting_cancelled',
-          'weekly_feedback', 'weekly_meeting_vote',
-          'faq_asked', 'resource_suggested', 'admin_notice'
+          'weekly_feedback', 'weekly_meeting_vote', 'meeting_agenda',
+          'lesson_plan_submitted', 'faq_asked', 'resource_suggested', 'admin_notice'
         ]
         && data.priority in ['normal', 'important']
         && isValidString(data.title, 1, 160)
@@ -480,6 +480,109 @@ service cloud.firestore {
         && isValidString(data.suggestedTime, 0, 200)
         && (data.selectedOption != 'other' || data.suggestedTime.size() >= 2)
         && isValidString(data.note, 0, 400)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidWeeklyMeetingInfo(data) {
+      return data.keys().hasAll([
+          'confirmedSlot', 'customTimeLabel', 'zoomLink', 'meetingDateLabel',
+          'latestNotes', 'updatedBy', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'confirmedSlot', 'customTimeLabel', 'zoomLink', 'meetingDateLabel',
+          'latestNotes', 'updatedBy', 'updatedAt'
+        ])
+        && data.confirmedSlot in ['sun_3_4_pm', 'sun_5_6_pm', 'custom']
+        && isValidString(data.customTimeLabel, 0, 160)
+        && isValidString(data.zoomLink, 0, 500)
+        && isValidString(data.meetingDateLabel, 0, 120)
+        && isValidString(data.latestNotes, 0, 2500)
+        && isValidString(data.updatedBy, 1, 120)
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidMeetingAgendaItem(data) {
+      return data.keys().hasAll([
+          'authorUid', 'authorName', 'topic', 'details', 'status',
+          'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'authorUid', 'authorName', 'topic', 'details', 'status',
+          'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.authorUid)
+        && isValidString(data.authorName, 1, 120)
+        && isValidString(data.topic, 3, 300)
+        && isValidString(data.details, 0, 600)
+        && data.status in ['open', 'discussed']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidWelcomePackItem(data) {
+      return data.keys().hasAll([
+          'title', 'category', 'description', 'mediaUrl', 'durationLabel',
+          'order', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'title', 'category', 'description', 'mediaUrl', 'durationLabel',
+          'order', 'createdAt', 'updatedAt'
+        ])
+        && isValidString(data.title, 1, 160)
+        && data.category in ['organisation', 'academic', 'zoom_tools', 'curriculum']
+        && isValidString(data.description, 0, 500)
+        && isValidString(data.mediaUrl, 1, 600)
+        && isValidString(data.durationLabel, 0, 40)
+        && data.order is number && data.order >= 0 && data.order <= 100
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidWelcomeProgress(data) {
+      return data.keys().hasAll([
+          'uid', 'teacherName', 'watchedOrientation', 'reviewedCoursebook',
+          'zoomScreenShareReady', 'zoomAudioShareReady', 'zoomBreakoutRoomsReady',
+          'practiceLessonDone', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'uid', 'teacherName', 'watchedOrientation', 'reviewedCoursebook',
+          'zoomScreenShareReady', 'zoomAudioShareReady', 'zoomBreakoutRoomsReady',
+          'practiceLessonDone', 'updatedAt'
+        ])
+        && isValidId(data.uid)
+        && isValidString(data.teacherName, 1, 120)
+        && data.watchedOrientation is bool
+        && data.reviewedCoursebook is bool
+        && data.zoomScreenShareReady is bool
+        && data.zoomAudioShareReady is bool
+        && data.zoomBreakoutRoomsReady is bool
+        && data.practiceLessonDone is bool
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidLessonPlan(data) {
+      return data.keys().hasAll([
+          'teacherUid', 'teacherName', 'level', 'className', 'weekLabel',
+          'lessonObjective', 'stagesSummary', 'planUrl', 'status',
+          'coordinatorFeedback', 'reviewedBy', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'teacherUid', 'teacherName', 'level', 'className', 'weekLabel',
+          'lessonObjective', 'stagesSummary', 'planUrl', 'status',
+          'coordinatorFeedback', 'reviewedBy', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.teacherUid)
+        && isValidString(data.teacherName, 1, 120)
+        && isValidString(data.level, 1, 40)
+        && isValidString(data.className, 1, 120)
+        && isValidString(data.weekLabel, 1, 60)
+        && isValidString(data.lessonObjective, 3, 400)
+        && isValidString(data.stagesSummary, 0, 2000)
+        && isValidString(data.planUrl, 0, 600)
+        && data.status in ['submitted', 'reviewed']
+        && isValidString(data.coordinatorFeedback, 0, 1200)
+        && isValidString(data.reviewedBy, 0, 120)
         && data.createdAt is timestamp
         && data.updatedAt is timestamp;
     }
@@ -561,6 +664,38 @@ service cloud.firestore {
           );
         allow delete: if isInteractiveUser() && isValidId(uid) && isValidId(checkinId)
           && (isAdmin() || (uid == request.auth.uid && existing().uid == request.auth.uid));
+      }
+
+      // 2c. Private New Teacher Welcome Pack & Zoom Readiness Progress (Master Gate)
+      match /welcomeProgress/{docId} {
+        allow get: if isValidId(uid) && isValidId(docId)
+          && (isAdmin() || (isInteractiveUser() && uid == request.auth.uid && existing().uid == request.auth.uid));
+        allow list: if isAdmin()
+          || (isInteractiveUser() && uid == request.auth.uid && resource.data.uid == request.auth.uid);
+        allow create: if isInteractiveUser() && isValidId(uid) && isValidId(docId)
+          && exists(/databases/$(database)/documents/teachers/$(uid))
+          && isValidWelcomeProgress(incoming())
+          && uid == request.auth.uid
+          && incoming().uid == request.auth.uid
+          && incoming().updatedAt == request.time;
+        allow update: if isInteractiveUser() && isValidId(uid) && isValidId(docId)
+          && exists(/databases/$(database)/documents/teachers/$(uid))
+          && isValidWelcomeProgress(incoming())
+          && incoming().uid == existing().uid
+          && incoming().updatedAt == request.time
+          && (
+            isAdmin()
+            || (
+              uid == request.auth.uid
+              && existing().uid == request.auth.uid
+              && incoming().diff(existing()).affectedKeys().hasOnly([
+                'teacherName', 'watchedOrientation', 'reviewedCoursebook',
+                'zoomScreenShareReady', 'zoomAudioShareReady',
+                'zoomBreakoutRoomsReady', 'practiceLessonDone', 'updatedAt'
+              ])
+            )
+          );
+        allow delete: if isAdmin() && isValidId(uid) && isValidId(docId);
       }
     }
 
@@ -910,8 +1045,8 @@ service cloud.firestore {
             incoming().audience == 'admin'
             && incoming().category in [
               'survey_submitted', 'meeting_booked', 'meeting_cancelled',
-              'weekly_feedback', 'weekly_meeting_vote',
-              'faq_asked', 'resource_suggested'
+              'weekly_feedback', 'weekly_meeting_vote', 'meeting_agenda',
+              'lesson_plan_submitted', 'faq_asked', 'resource_suggested'
             ]
             && incoming().readByAdmin == false
           )
@@ -955,6 +1090,98 @@ service cloud.firestore {
     match /{path=**}/weeklyCheckins/{checkinId} {
       allow get: if isAdmin() && isValidId(checkinId);
       allow list: if isAdmin();
+    }
+
+    // 20. Weekly Academic Team Meeting Zoom Link & Action Notes (Admin writes, all allowed users read)
+    match /weeklyMeetingInfo/{infoId} {
+      allow get: if isAllowedUser() && isValidId(infoId);
+      allow list: if isAllowedUser();
+      allow create: if isAdmin() && isValidId(infoId)
+        && isValidWeeklyMeetingInfo(incoming())
+        && incoming().updatedAt == request.time;
+      allow update: if isAdmin() && isValidId(infoId)
+        && isValidWeeklyMeetingInfo(incoming())
+        && incoming().updatedAt == request.time;
+      allow delete: if isAdmin() && isValidId(infoId);
+    }
+
+    // 21. Weekly Academic Team Meeting Agenda Topics (Teachers & Admins add; Admin marks discussed)
+    match /meetingAgendaItems/{itemId} {
+      allow get: if isAllowedUser() && isValidId(itemId);
+      allow list: if isAllowedUser();
+      allow create: if isInteractiveUser() && isValidId(itemId)
+        && isValidMeetingAgendaItem(incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && (isAdmin() || (incoming().authorUid == request.auth.uid && incoming().status == 'open'));
+      allow update: if isInteractiveUser() && isValidId(itemId)
+        && isValidMeetingAgendaItem(incoming())
+        && incoming().authorUid == existing().authorUid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin()
+          || (
+            existing().authorUid == request.auth.uid
+            && existing().status == 'open'
+            && incoming().diff(existing()).affectedKeys().hasOnly(['topic', 'details', 'updatedAt'])
+          )
+        );
+      allow delete: if isInteractiveUser() && isValidId(itemId)
+        && (isAdmin() || existing().authorUid == request.auth.uid);
+    }
+
+    // 22. New Teacher Welcome Pack & Orientation Videos (Admin manages, all allowed users read)
+    match /welcomePackItems/{itemId} {
+      allow get: if isAllowedUser() && isValidId(itemId);
+      allow list: if isAllowedUser();
+      allow create: if isAdmin() && isValidId(itemId)
+        && isValidWelcomePackItem(incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isAdmin() && isValidId(itemId)
+        && isValidWelcomePackItem(incoming())
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+      allow delete: if isAdmin() && isValidId(itemId);
+    }
+
+    // 23. Weekly Lesson Plan Submissions & Coordinator Feedback (Private to submitting teacher + Admin)
+    match /lessonPlans/{planId} {
+      allow get: if isValidId(planId)
+        && (isAdmin() || (isInteractiveUser() && existing().teacherUid == request.auth.uid));
+      allow list: if isAdmin()
+        || (isInteractiveUser() && resource.data.teacherUid == request.auth.uid);
+      allow create: if isInteractiveUser() && isValidId(planId)
+        && isValidLessonPlan(incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin()
+          || (
+            incoming().teacherUid == request.auth.uid
+            && incoming().status == 'submitted'
+            && incoming().coordinatorFeedback == ''
+            && incoming().reviewedBy == ''
+          )
+        );
+      allow update: if isInteractiveUser() && isValidId(planId)
+        && isValidLessonPlan(incoming())
+        && incoming().teacherUid == existing().teacherUid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin()
+          || (
+            existing().teacherUid == request.auth.uid
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'level', 'className', 'weekLabel', 'lessonObjective',
+              'stagesSummary', 'planUrl', 'updatedAt'
+            ])
+          )
+        );
+      allow delete: if isInteractiveUser() && isValidId(planId)
+        && (isAdmin() || existing().teacherUid == request.auth.uid);
     }
   }
 }

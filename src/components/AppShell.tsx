@@ -26,6 +26,7 @@ import type { NavTab } from '../types';
 import { getInitials } from '../utils/helpers';
 import { NotificationBar } from './NotificationBar';
 import { EmailConfirmModal } from './EmailConfirmModal';
+import { MeetingReminderToast } from './MeetingReminderToast';
 
 interface AppShellProps {
   activeTab: NavTab;
@@ -51,7 +52,7 @@ const ALL_NAV_ITEMS: NavItemDef[] = [
   { id: 'resources', label: 'Resource Library', shortLabel: 'Library', icon: FolderOpen, group: 'team' },
   { id: 'training', label: 'Training', shortLabel: 'Training', icon: GraduationCap, group: 'team' },
   { id: 'voice', label: 'Teacher Voice & FAQ', shortLabel: 'Voice', icon: MessageSquare, group: 'team' },
-  { id: 'tools', label: 'Copy & Use Tools', shortLabel: 'Tools', icon: ClipboardList, group: 'team' },
+  { id: 'tools', label: 'Lesson Plans & Tools', shortLabel: 'Tools', icon: ClipboardList, group: 'team' },
   { id: 'good-practice', label: 'Good Practice', shortLabel: 'Practice', icon: BookOpen, group: 'team' },
   { id: 'admin', label: 'Admin Dashboard', shortLabel: 'Admin', icon: Shield, group: 'admin' },
 ];
@@ -379,6 +380,9 @@ export function AppShell({ activeTab, onSelectTab, children }: AppShellProps) {
 
       {/* Global Explicit Confirmation Modal for Gmail Notification Emails */}
       <EmailConfirmModal draft={pendingEmailDraft} onClose={clearPendingEmailDraft} />
+
+      {/* Global 10-Minute Upcoming Meeting Reminder Toast (Myanmar Time · MMT) */}
+      <MeetingReminderToast onSelectTab={handleNavClick} />
     </div>
   );
 }

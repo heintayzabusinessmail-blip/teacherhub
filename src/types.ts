@@ -273,6 +273,8 @@ export type NotificationCategory =
   | 'meeting_cancelled'
   | 'weekly_feedback'
   | 'weekly_meeting_vote'
+  | 'meeting_agenda'
+  | 'lesson_plan_submitted'
   | 'faq_asked'
   | 'resource_suggested'
   | 'admin_notice';
@@ -316,5 +318,71 @@ export interface WeeklyMeetingVote {
   createdAt?: Timestamp | null;
   updatedAt?: Timestamp | null;
 }
+
+export interface WeeklyMeetingInfo {
+  id: string;
+  confirmedSlot: 'sun_3_4_pm' | 'sun_5_6_pm' | 'custom';
+  customTimeLabel: string;
+  zoomLink: string;
+  meetingDateLabel: string;
+  latestNotes: string;
+  updatedBy: string;
+  updatedAt?: Timestamp | null;
+}
+
+export interface MeetingAgendaItem {
+  id: string;
+  authorUid: string;
+  authorName: string;
+  topic: string;
+  details: string;
+  status: 'open' | 'discussed';
+  createdAt?: Timestamp | null;
+  updatedAt?: Timestamp | null;
+}
+
+export type WelcomePackCategory = 'organisation' | 'academic' | 'zoom_tools' | 'curriculum';
+
+export interface WelcomePackItem {
+  id: string;
+  title: string;
+  category: WelcomePackCategory;
+  description: string;
+  mediaUrl: string;
+  durationLabel: string;
+  order: number;
+  createdAt?: Timestamp | null;
+  updatedAt?: Timestamp | null;
+}
+
+export interface WelcomeProgressDoc {
+  uid: string;
+  teacherName: string;
+  watchedOrientation: boolean;
+  reviewedCoursebook: boolean;
+  zoomScreenShareReady: boolean;
+  zoomAudioShareReady: boolean;
+  zoomBreakoutRoomsReady: boolean;
+  practiceLessonDone: boolean;
+  updatedAt?: Timestamp | null;
+}
+
+export interface LessonPlanSubmission {
+  id: string;
+  teacherUid: string;
+  teacherName: string;
+  level: string;
+  className: string;
+  weekLabel: string;
+  lessonObjective: string;
+  stagesSummary: string;
+  planUrl: string;
+  status: 'submitted' | 'reviewed';
+  coordinatorFeedback: string;
+  reviewedBy: string;
+  createdAt?: Timestamp | null;
+  updatedAt?: Timestamp | null;
+}
+
 
 

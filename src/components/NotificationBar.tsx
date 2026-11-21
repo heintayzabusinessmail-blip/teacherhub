@@ -799,7 +799,8 @@ export function NotificationBar({ onSelectTab }: NotificationBarProps) {
                     >
                       <option value="">Link button: None</option>
                       <option value="meetings">Link to: Meetings (Weekly &amp; 1-to-1)</option>
-                      <option value="my-month-1">Link to: My Month 1 (Checklist &amp; Weekly Feedback)</option>
+                      <option value="my-month-1">Link to: My Month 1 (Checklist, Welcome Pack &amp; Feedback)</option>
+                      <option value="tools">Link to: Lesson Plans &amp; Tools</option>
                       <option value="voice">Link to: Teacher Voice &amp; Survey</option>
                       <option value="training">Link to: Training</option>
                       <option value="resources">Link to: Resource Library</option>

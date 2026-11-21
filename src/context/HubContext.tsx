@@ -29,6 +29,8 @@ import type {
   HelloPost,
   HubConfigDoc,
   HubNotification,
+  LessonPlanSubmission,
+  MeetingAgendaItem,
   NeedsSurveyDoc,
   ObservationDoc,
   OneToOneSlot,
@@ -40,7 +42,10 @@ import type {
   TrainingResponse,
   TrainingSession,
   UserRole,
+  WeeklyMeetingInfo,
   WeeklyMeetingVote,
+  WelcomePackItem,
+  WelcomeProgressDoc,
 } from '../types';
 
 interface HubContextValue {
@@ -86,6 +91,11 @@ interface HubContextValue {
   myWeeklyCheckins: TeacherWeeklyCheckin[];
   allWeeklyCheckins: TeacherWeeklyCheckin[];
   weeklyMeetingVotes: WeeklyMeetingVote[];
+  weeklyMeetingInfo: WeeklyMeetingInfo | null;
+  meetingAgendaItems: MeetingAgendaItem[];
+  welcomePackItems: WelcomePackItem[];
+  myWelcomeProgress: WelcomeProgressDoc | null;
+  lessonPlans: LessonPlanSubmission[];
   hasSampleData: boolean;
 }
 
@@ -138,6 +148,11 @@ export function HubProvider({ children }: { children: React.ReactNode }) {
   const [myWeeklyCheckins, setMyWeeklyCheckins] = useState<TeacherWeeklyCheckin[]>([]);
   const [allWeeklyCheckins, setAllWeeklyCheckins] = useState<TeacherWeeklyCheckin[]>([]);
   const [weeklyMeetingVotes, setWeeklyMeetingVotes] = useState<WeeklyMeetingVote[]>([]);
+  const [weeklyMeetingInfo, setWeeklyMeetingInfo] = useState<WeeklyMeetingInfo | null>(null);
+  const [meetingAgendaItems, setMeetingAgendaItems] = useState<MeetingAgendaItem[]>([]);
+  const [welcomePackItems, setWelcomePackItems] = useState<WelcomePackItem[]>([]);
+  const [myWelcomeProgress, setMyWelcomeProgress] = useState<WelcomeProgressDoc | null>(null);
+  const [lessonPlans, setLessonPlans] = useState<LessonPlanSubmission[]>([]);
 
   // Apply dark mode class to <html>
   useEffect(() => {
@@ -249,6 +264,11 @@ export function HubProvider({ children }: { children: React.ReactNode }) {
       setMyWeeklyCheckins([]);
       setAllWeeklyCheckins([]);
       setWeeklyMeetingVotes([]);
+      setWeeklyMeetingInfo(null);
+      setMeetingAgendaItems([]);
+      setWelcomePackItems([]);
+      setMyWelcomeProgress(null);
+      setLessonPlans([]);
       setProfileLoaded(false);
       setSyncError(null);
       return;
@@ -685,6 +705,110 @@ export function HubProvider({ children }: { children: React.ReactNode }) {
       )
     );
 
+    // 16. Weekly Meeting Zoom Link & Action Notes
+    unsubs.push(
+      onSnapshot(
+        doc(db, 'weeklyMeetingInfo', 'current'),
+        (snap) => {
+          setWeeklyMeetingInfo(
+            snap.exists() ? ({ ...(snap.data() as WeeklyMeetingInfo), id: snap.id }) : null
+          );
+        },
+        (err) => reportSnapshotError(err, OperationType.GET, 'weeklyMeetingInfo/current')
+      )
+    );
+
+    // 17. Weekly Meeting Agenda Items
+    unsubs.push(
+      onSnapshot(
+        collection(db, 'meetingAgendaItems'),
+        (snap) => {
+          const list = snap.docs.map((d) => ({
+            ...(d.data() as MeetingAgendaItem),
+            id: d.id,
+          }));
+          list.sort((a, b) => {
+            if (a.status !== b.status) return a.status === 'open' ? -1 : 1;
+            return (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0);
+          });
+          setMeetingAgendaItems(list);
+        },
+        (err) => reportSnapshotError(err, OperationType.LIST, 'meetingAgendaItems')
+      )
+    );
+
+    // 18. New Teacher Welcome Pack Items (Orientation Videos & Guides)
+    unsubs.push(
+      onSnapshot(
+        collection(db, 'welcomePackItems'),
+        (snap) => {
+          const list = snap.docs.map((d) => ({
+            ...(d.data() as WelcomePackItem),
+            id: d.id,
+          }));
+          list.sort((a, b) => {
+            if ((a.order ?? 99) !== (b.order ?? 99)) return (a.order ?? 99) - (b.order ?? 99);
+            return (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0);
+          });
+          setWelcomePackItems(list);
+        },
+        (err) => reportSnapshotError(err, OperationType.LIST, 'welcomePackItems')
+      )
+    );
+
+    // 19. Teacher's Own Welcome Pack & Zoom Readiness Progress
+    if (canInteract) {
+      unsubs.push(
+        onSnapshot(
+          doc(db, 'teachers', uid, 'welcomeProgress', 'current'),
+          (snap) => {
+            setMyWelcomeProgress(
+              snap.exists() ? ({ ...(snap.data() as WelcomeProgressDoc), uid }) : null
+            );
+          },
+          (err) =>
+            reportSnapshotError(err, OperationType.GET, `teachers/${uid}/welcomeProgress/current`)
+        )
+      );
+    } else {
+      setMyWelcomeProgress(null);
+    }
+
+    // 20. Weekly Lesson Plan Submissions (Admin sees all; Teacher sees own; Viewers see none)
+    if (isAdmin) {
+      unsubs.push(
+        onSnapshot(
+          collection(db, 'lessonPlans'),
+          (snap) => {
+            const list = snap.docs.map((d) => ({
+              ...(d.data() as LessonPlanSubmission),
+              id: d.id,
+            }));
+            list.sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0));
+            setLessonPlans(list);
+          },
+          (err) => reportSnapshotError(err, OperationType.LIST, 'lessonPlans/all')
+        )
+      );
+    } else if (canInteract) {
+      unsubs.push(
+        onSnapshot(
+          query(collection(db, 'lessonPlans'), where('teacherUid', '==', uid)),
+          (snap) => {
+            const list = snap.docs.map((d) => ({
+              ...(d.data() as LessonPlanSubmission),
+              id: d.id,
+            }));
+            list.sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0));
+            setLessonPlans(list);
+          },
+          (err) => reportSnapshotError(err, OperationType.LIST, 'lessonPlans/mine')
+        )
+      );
+    } else {
+      setLessonPlans([]);
+    }
+
     return () => {
       unsubs.forEach((u) => u());
     };
@@ -747,6 +871,11 @@ export function HubProvider({ children }: { children: React.ReactNode }) {
     myWeeklyCheckins,
     allWeeklyCheckins,
     weeklyMeetingVotes,
+    weeklyMeetingInfo,
+    meetingAgendaItems,
+    welcomePackItems,
+    myWelcomeProgress,
+    lessonPlans,
     hasSampleData,
   };
 

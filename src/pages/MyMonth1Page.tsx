@@ -21,6 +21,7 @@ import { PageHeader } from '../components/PageHeader';
 import { downloadIcsEvent, formatLocalDateTime, getGoogleCalendarUrl } from '../utils/helpers';
 import { notifyAdminOfTeacherAction } from '../utils/notifications';
 import { formatWeeklyOptionLabel } from './MeetingsPage';
+import { WelcomePackSection } from '../components/WelcomePackSection';
 import type { NavTab, ObservationDoc, WeeklyCheckinMood } from '../types';
 
 interface MyMonth1PageProps {
@@ -292,6 +293,9 @@ export function MyMonth1Page({ onNavigate }: MyMonth1PageProps) {
         </ul>
       </section>
 
+      {/* 1b. New Teacher Welcome Pack & Orientation Videos (Job #1 · Week 3) */}
+      <WelcomePackSection onNavigate={onNavigate} />
+
       {/* 2. Weekly Feedback & Challenges Form (stored under /teachers/{uid}/weeklyCheckins) */}
       <section className="bg-white dark:bg-[#1F1629] rounded-2xl border border-[#E5D9EC] dark:border-[#332442] p-5 sm:p-6 shadow-sm space-y-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
@@ -497,14 +501,24 @@ export function MyMonth1Page({ onNavigate }: MyMonth1PageProps) {
               : 'Not booked yet'}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => onNavigate('meetings')}
-          className="min-h-[44px] inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#3B1050] hover:bg-[#4E1869] text-white text-xs font-semibold whitespace-nowrap shrink-0 transition-colors"
-        >
-          Open Meetings tab
-          <ArrowRight className="w-4 h-4" />
-        </button>
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => onNavigate('tools')}
+            className="min-h-[44px] inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-[#E5D9EC] dark:border-[#332442] bg-[#FAF7FC] dark:bg-[#2A1D38] text-[#3B1050] dark:text-[#E8D5F5] text-xs font-semibold whitespace-nowrap transition-colors"
+          >
+            Submit Lesson Plan
+            <ArrowRight className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => onNavigate('meetings')}
+            className="min-h-[44px] inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#3B1050] hover:bg-[#4E1869] text-white text-xs font-semibold whitespace-nowrap transition-colors"
+          >
+            Open Meetings tab
+            <ArrowRight className="w-4 h-4" />
+          </button>
+        </div>
       </section>
 
       {/* 4. Class Observation Schedule & Private Feedback */}

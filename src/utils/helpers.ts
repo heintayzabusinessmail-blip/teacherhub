@@ -33,6 +33,59 @@ export function getViewerTimeZone(): string {
   return MYANMAR_TIME_LABEL;
 }
 
+const MYANMAR_OFFSET_MS = 390 * 60 * 1000; // Fixed UTC+06:30 (Asia/Yangon has no DST)
+
+export function formatMyanmarClock(date: Date = new Date()): string {
+  const formatted = new Intl.DateTimeFormat('en-GB', {
+    weekday: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+    timeZone: MYANMAR_TIME_ZONE,
+  }).format(date);
+  return `${formatted} MMT`;
+}
+
+export function formatMyanmarTimeOnly(isoOrMs: string | number): string {
+  const d = new Date(isoOrMs);
+  if (Number.isNaN(d.getTime())) return '';
+  const formatted = new Intl.DateTimeFormat('en-GB', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+    timeZone: MYANMAR_TIME_ZONE,
+  }).format(d);
+  return `${formatted} MMT`;
+}
+
+/**
+ * Returns the exact UTC ISO timestamp for the next Sunday at `hour24:00` in Myanmar Time (UTC+06:30).
+ * Keeps today's Sunday slot active until 1 minute after its start time so 10-min reminders stay visible.
+ */
+export function getNextMyanmarSundaySlotIso(hour24: number, now: Date = new Date()): string {
+  const nowMs = now.getTime();
+  const mmtShifted = new Date(nowMs + MYANMAR_OFFSET_MS);
+  const mmtDayOfWeek = mmtShifted.getUTCDay(); // 0 = Sunday
+  const daysUntilSunday = (7 - mmtDayOfWeek) % 7;
+
+  let targetMs =
+    Date.UTC(
+      mmtShifted.getUTCFullYear(),
+      mmtShifted.getUTCMonth(),
+      mmtShifted.getUTCDate() + daysUntilSunday,
+      hour24,
+      0,
+      0,
+      0
+    ) - MYANMAR_OFFSET_MS;
+
+  if (nowMs > targetMs + 60_000) {
+    targetMs += 7 * 24 * 60 * 60 * 1000;
+  }
+
+  return new Date(targetMs).toISOString();
+}
+
 /**
  * Converts an ISO timestamp (or Date) into a YYYY-MM-DDTHH:mm string in Myanmar Time (UTC+06:30)
  * for <input type="datetime-local" /> controls.
