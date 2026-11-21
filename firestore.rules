@@ -587,8 +587,28 @@ service cloud.firestore {
         && data.updatedAt is timestamp;
     }
 
+    function isValidUserPresence(data) {
+      return data.keys().hasAll([
+          'uid', 'email', 'displayName', 'role', 'photoUrl',
+          'isOnline', 'currentTab', 'firstSignedInAt', 'lastSeenAt'
+        ])
+        && data.keys().hasOnly([
+          'uid', 'email', 'displayName', 'role', 'photoUrl',
+          'isOnline', 'currentTab', 'firstSignedInAt', 'lastSeenAt'
+        ])
+        && isValidId(data.uid)
+        && isValidString(data.email, 5, 200)
+        && isValidString(data.displayName, 1, 120)
+        && data.role in ['admin', 'teacher', 'viewer']
+        && isValidString(data.photoUrl, 0, 150000)
+        && data.isOnline is bool
+        && isValidString(data.currentTab, 0, 40)
+        && data.firstSignedInAt is timestamp
+        && data.lastSeenAt is timestamp;
+    }
+
     // =========================================================================
-    // Collection Match Blocks (All 17 Collections Secured)
+    // Collection Match Blocks (All Collections Secured)
     // =========================================================================
 
     // 1. Allowlist (Contains PII: email — strictly isolated; ONLY primary owner can manage access/roles)
@@ -636,7 +656,7 @@ service cloud.firestore {
       // 2b. Private Weekly Feedback & Challenges stored under each teacher's profile (Master Gate)
       match /weeklyCheckins/{checkinId} {
         allow get: if isValidId(uid) && isValidId(checkinId)
-          && (isAdmin() || (isInteractiveUser() && uid == request.auth.uid && existing().uid == request.auth.uid));
+          && (isAdmin() || (isInteractiveUser() && uid == request.auth.uid && (resource == null || existing().uid == request.auth.uid)));
         allow list: if isAdmin()
           || (isInteractiveUser() && uid == request.auth.uid && resource.data.uid == request.auth.uid);
         allow create: if isInteractiveUser() && isValidId(uid) && isValidId(checkinId)
@@ -669,7 +689,7 @@ service cloud.firestore {
       // 2c. Private New Teacher Welcome Pack & Zoom Readiness Progress (Master Gate)
       match /welcomeProgress/{docId} {
         allow get: if isValidId(uid) && isValidId(docId)
-          && (isAdmin() || (isInteractiveUser() && uid == request.auth.uid && existing().uid == request.auth.uid));
+          && (isAdmin() || (isInteractiveUser() && uid == request.auth.uid && (resource == null || existing().uid == request.auth.uid)));
         allow list: if isAdmin()
           || (isInteractiveUser() && uid == request.auth.uid && resource.data.uid == request.auth.uid);
         allow create: if isInteractiveUser() && isValidId(uid) && isValidId(docId)
@@ -1182,6 +1202,31 @@ service cloud.firestore {
         );
       allow delete: if isInteractiveUser() && isValidId(planId)
         && (isAdmin() || existing().teacherUid == request.auth.uid);
+    }
+
+    // 24. Registered Signed-In Users & Live Online Presence (Contains PII: email — strictly self + Admin ONLY)
+    match /userPresence/{uid} {
+      allow get: if isValidId(uid)
+        && (isAdmin() || (isVerified() && uid == request.auth.uid));
+      allow list: if isAdmin();
+      allow create: if isVerified() && isValidId(uid)
+        && uid == request.auth.uid
+        && isValidUserPresence(incoming())
+        && incoming().uid == request.auth.uid
+        && incoming().email == request.auth.token.email.lower()
+        && incoming().firstSignedInAt == request.time
+        && incoming().lastSeenAt == request.time;
+      allow update: if isVerified() && isValidId(uid)
+        && uid == request.auth.uid
+        && isValidUserPresence(incoming())
+        && incoming().uid == existing().uid
+        && incoming().email == request.auth.token.email.lower()
+        && incoming().firstSignedInAt == existing().firstSignedInAt
+        && incoming().lastSeenAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'displayName', 'role', 'photoUrl', 'isOnline', 'currentTab', 'lastSeenAt'
+        ]);
+      allow delete: if isAdmin() && isValidId(uid);
     }
   }
 }

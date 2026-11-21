@@ -1,5 +1,6 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
+  Activity,
   AlertTriangle,
   BarChart3,
   CalendarPlus,
@@ -16,6 +17,7 @@ import {
   Shield,
   Target,
   Trash2,
+  UserCheck,
   UserPlus,
   Users,
 } from 'lucide-react';
@@ -40,6 +42,8 @@ import { ADMIN_TARGETS, PAGE_SUMMARIES } from '../content/planContent';
 import { PageHeader } from '../components/PageHeader';
 import {
   formatLocalDateTime,
+  formatRelativeLastSeen,
+  getInitials,
   isoToMyanmarInput,
   MYANMAR_TIME_LABEL,
   myanmarInputToIso,
@@ -47,10 +51,35 @@ import {
 import { downloadMonth1ReportPdf } from '../utils/pdfExport';
 import { clearAllSampleData, seedFictionalSampleData } from '../utils/seedData';
 import { formatWeeklyOptionLabel } from './MeetingsPage';
-import type { ObservationDoc, UserRole } from '../types';
+import type { ObservationDoc, UserPresenceDoc, UserRole } from '../types';
+
+const ONLINE_WINDOW_MS = 150_000; // 2.5 mins heartbeat threshold
+
+const TAB_LABELS: Record<string, string> = {
+  home: 'Home',
+  plan: 'About & Plan',
+  roadmap: '6-Month Roadmap',
+  'my-month-1': 'My Month 1',
+  meetings: 'Meetings',
+  team: 'Meet the Team',
+  resources: 'Resource Library',
+  training: 'Training',
+  voice: 'Teacher Voice & FAQ',
+  tools: 'Lesson Plans & Tools',
+  'good-practice': 'Good Practice',
+  admin: 'Admin Dashboard',
+};
+
+function isPresenceOnline(u: UserPresenceDoc, nowMs: number): boolean {
+  if (!u.isOnline) return false;
+  const lastMs = u.lastSeenAt?.toMillis?.() ?? 0;
+  if (!lastMs) return false;
+  return nowMs - lastMs <= ONLINE_WINDOW_MS;
+}
 
 type AdminSubTab =
   | 'overview'
+  | 'active-users'
   | 'submissions'
   | 'allowlist'
   | 'slots'
@@ -79,10 +108,18 @@ export function AdminPage() {
     syllabusEntries,
     allWeeklyCheckins,
     weeklyMeetingVotes,
+    userPresences,
     hasSampleData,
   } = useHub();
 
   const [subTab, setSubTab] = useState<AdminSubTab>('overview');
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const [promotingEmail, setPromotingEmail] = useState<string | null>(null);
+
+  useEffect(() => {
+    const id = window.setInterval(() => setNowMs(Date.now()), 15_000);
+    return () => window.clearInterval(id);
+  }, []);
 
   // Allowlist form
   const [newEmail, setNewEmail] = useState('');
@@ -177,6 +214,30 @@ export function AdminPage() {
     return Object.entries(counts).sort((a, b) => b[1] - a[1]);
   }, [allSurveys]);
 
+  const sortedActiveUsers = useMemo(() => {
+    return [...userPresences].sort((a, b) => {
+      const aOnline = isPresenceOnline(a, nowMs) ? 1 : 0;
+      const bOnline = isPresenceOnline(b, nowMs) ? 1 : 0;
+      if (aOnline !== bOnline) return bOnline - aOnline;
+      return (b.lastSeenAt?.toMillis?.() ?? 0) - (a.lastSeenAt?.toMillis?.() ?? 0);
+    });
+  }, [userPresences, nowMs]);
+
+  const onlineUsersCount = useMemo(
+    () => sortedActiveUsers.filter((u) => isPresenceOnline(u, nowMs)).length,
+    [sortedActiveUsers, nowMs]
+  );
+
+  const onlineEmailSet = useMemo(() => {
+    const set = new Set<string>();
+    sortedActiveUsers.forEach((u) => {
+      if (isPresenceOnline(u, nowMs)) {
+        set.add(u.email.toLowerCase());
+      }
+    });
+    return set;
+  }, [sortedActiveUsers, nowMs]);
+
   if (!isAdmin) {
     return (
       <div className="bg-white dark:bg-[#1F1629] rounded-2xl border border-[#E5D9EC] dark:border-[#332442] p-8 text-center space-y-2">
@@ -232,6 +293,29 @@ export function AdminPage() {
       await deleteDoc(doc(db, 'allowlist', id));
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, `allowlist/${id}`);
+    }
+  };
+
+  const handleQuickGrantTeacher = async (u: UserPresenceDoc) => {
+    if (!user || !isPrimaryOwner) return;
+    const cleanEmail = u.email.trim().toLowerCase();
+    setPromotingEmail(cleanEmail);
+    try {
+      const id = emailToKey(cleanEmail);
+      const now = serverTimestamp();
+      await setDoc(doc(db, 'allowlist', id), {
+        email: cleanEmail.slice(0, 200),
+        role: 'teacher',
+        displayName: (u.displayName || cleanEmail.split('@')[0]).slice(0, 120),
+        addedBy: user.uid,
+        isSample: false,
+        createdAt: now,
+        updatedAt: now,
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, `allowlist/${emailToKey(cleanEmail)}`);
+    } finally {
+      setPromotingEmail(null);
     }
   };
 
@@ -440,24 +524,35 @@ export function AdminPage() {
         {(
           [
             { id: 'overview', label: 'Progress & Targets' },
+            {
+              id: 'active-users',
+              label: `Active Users (${onlineUsersCount} online · ${sortedActiveUsers.length})`,
+              showOnlineDot: onlineUsersCount > 0,
+            },
             { id: 'submissions', label: `Teacher Submissions (${totalSubmissionsCount})` },
             { id: 'surveys', label: `Surveys (${allSurveys.length}) & Box (${suggestions.length})` },
             { id: 'slots', label: `1-to-1 Slots (${oneToOneSlots.length})` },
             { id: 'observations', label: `Observations (${observations.length})` },
             { id: 'allowlist', label: `Edit Access & Roles (${allowlist.length})` },
             { id: 'report', label: 'One-Page M1 Report' },
-          ] as const
+          ] as Array<{ id: AdminSubTab; label: string; showOnlineDot?: boolean }>
         ).map((tab) => (
           <button
             key={tab.id}
             type="button"
             onClick={() => setSubTab(tab.id)}
-            className={`min-h-[40px] px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-colors whitespace-nowrap ${
+            className={`min-h-[40px] inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-colors whitespace-nowrap ${
               subTab === tab.id
                 ? 'bg-[#3B1050] text-white'
                 : 'text-[#5A4A66] dark:text-[#C5B4D4] hover:bg-[#F4EEF7] dark:hover:bg-[#2A1D38]'
             }`}
           >
+            {tab.showOnlineDot && (
+              <span className="relative flex h-2.5 w-2.5 shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
+              </span>
+            )}
             {tab.label}
           </button>
         ))}
@@ -466,7 +561,23 @@ export function AdminPage() {
       {/* TAB 1: Overview, Resource Usage & Targets */}
       {subTab === 'overview' && (
         <div className="space-y-6">
-          <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
+          <div className="grid grid-cols-2 lg:grid-cols-7 gap-3">
+            <button
+              type="button"
+              onClick={() => setSubTab('active-users')}
+              className="bg-white dark:bg-[#1F1629] rounded-2xl border-2 border-emerald-400/60 dark:border-emerald-700/70 p-4 shadow-xs text-left hover:bg-emerald-50/40 dark:hover:bg-emerald-950/20 transition-colors"
+            >
+              <p className="text-xs text-emerald-700 dark:text-emerald-300 font-semibold flex items-center gap-1.5">
+                <span className="relative flex h-2.5 w-2.5 shrink-0">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
+                </span>
+                Online now
+              </p>
+              <p className="text-2xl font-bold text-emerald-700 dark:text-emerald-300 mt-1 tabular-nums">
+                {onlineUsersCount}/{sortedActiveUsers.length}
+              </p>
+            </button>
             {[
               { label: 'Profiles done', value: `${teachers.filter((t) => t.onboardingComplete).length}/${teachers.length}` },
               { label: 'Surveys done', value: `${allSurveys.length}` },
@@ -486,6 +597,114 @@ export function AdminPage() {
               </div>
             ))}
           </div>
+
+          {/* Live Registered Active Users Summary Strip */}
+          <section className="bg-white dark:bg-[#1F1629] rounded-2xl border border-[#E5D9EC] dark:border-[#332442] p-5 sm:p-6 shadow-sm space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h2 className="text-base font-bold text-[#1F122B] dark:text-[#F5EEF9] flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                  Registered Active Users ({sortedActiveUsers.length}) ·{' '}
+                  <span className="text-emerald-700 dark:text-emerald-400">
+                    {onlineUsersCount} online now
+                  </span>
+                </h2>
+                <p className="text-xs text-[#5A4A66] dark:text-[#BBAAC9]">
+                  Every email that has signed into the YAO Teacher Hub appears here automatically with a live green light while they are using the app.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSubTab('active-users')}
+                className="min-h-[36px] px-3 py-1.5 rounded-xl bg-[#F4EEF7] hover:bg-[#E8DCF0] dark:bg-[#2A1D38] text-xs font-bold text-[#3B1050] dark:text-[#E8D5F5]"
+              >
+                View full user list
+              </button>
+            </div>
+
+            {sortedActiveUsers.length === 0 ? (
+              <p className="text-sm text-[#5A4A66] dark:text-[#BBAAC9]">
+                Signed-in accounts will appear here automatically as soon as someone opens the hub.
+              </p>
+            ) : (
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                {sortedActiveUsers.slice(0, 6).map((u) => {
+                  const online = isPresenceOnline(u, nowMs);
+                  const lastMs = u.lastSeenAt?.toMillis?.() ?? 0;
+                  const isOwnerUser = u.email.toLowerCase() === BOOTSTRAPPED_ADMIN_EMAIL;
+                  return (
+                    <div
+                      key={u.uid}
+                      className={`p-3 rounded-xl border flex items-center gap-3 ${
+                        online
+                          ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-300/70 dark:border-emerald-800/70'
+                          : 'bg-[#FAF7FC] dark:bg-[#160F1F] border-[#E5D9EC] dark:border-[#332442]'
+                      }`}
+                    >
+                      <div className="relative shrink-0">
+                        {u.photoUrl ? (
+                          <img
+                            src={u.photoUrl}
+                            alt={u.displayName}
+                            className="w-10 h-10 rounded-xl object-cover border border-[#E5D9EC] dark:border-[#332442]"
+                            referrerPolicy="no-referrer"
+                          />
+                        ) : (
+                          <div className="w-10 h-10 rounded-xl bg-[#3B1050] text-white text-xs font-bold flex items-center justify-center">
+                            {getInitials(u.displayName)}
+                          </div>
+                        )}
+                        <span
+                          title={online ? 'Online now' : 'Offline'}
+                          className="absolute -bottom-0.5 -right-0.5 flex h-3.5 w-3.5"
+                        >
+                          {online && (
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                          )}
+                          <span
+                            className={`relative inline-flex rounded-full h-3.5 w-3.5 border-2 border-white dark:border-[#1F1629] ${
+                              online ? 'bg-emerald-500' : 'bg-gray-400 dark:bg-gray-600'
+                            }`}
+                          />
+                        </span>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-1.5">
+                          <p className="text-xs font-bold text-[#1F122B] dark:text-[#F5EEF9] truncate">
+                            {u.displayName}
+                          </p>
+                          <span
+                            className={`text-[10px] font-bold shrink-0 ${
+                              online
+                                ? 'text-emerald-700 dark:text-emerald-400'
+                                : 'text-[#7A6888] dark:text-[#9D8AAD]'
+                            }`}
+                          >
+                            {online ? 'Online' : formatRelativeLastSeen(lastMs, nowMs)}
+                          </span>
+                        </div>
+                        <p className="text-[11px] font-mono text-[#5A4A66] dark:text-[#BBAAC9] truncate">
+                          {u.email}
+                        </p>
+                        <p className="text-[10px] text-[#7A6888] dark:text-[#9D8AAD] truncate">
+                          {isOwnerUser
+                            ? 'Owner'
+                            : u.role === 'admin'
+                              ? 'Editor / Admin'
+                              : u.role === 'teacher'
+                                ? 'Teacher'
+                                : 'View-Only'}
+                          {online && u.currentTab
+                            ? ` · Viewing ${TAB_LABELS[u.currentTab] || u.currentTab}`
+                            : ''}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
 
           {/* Flagged Materials Gaps from Live Syllabus Tracker */}
           <section className="bg-white dark:bg-[#1F1629] rounded-2xl border border-[#E5D9EC] dark:border-[#332442] p-5 sm:p-6 shadow-sm space-y-4">
@@ -604,6 +823,200 @@ export function AdminPage() {
             </div>
           </section>
         </div>
+      )}
+
+      {/* TAB 1A: Registered Active Users & Live Online Status */}
+      {subTab === 'active-users' && (
+        <section className="bg-white dark:bg-[#1F1629] rounded-2xl border border-[#E5D9EC] dark:border-[#332442] p-5 sm:p-6 shadow-sm space-y-5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#F0E6F5] dark:border-[#2E203D] pb-4">
+            <div>
+              <h2 className="text-lg font-bold text-[#1F122B] dark:text-[#F5EEF9] flex items-center gap-2">
+                <UserCheck className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                Registered Active Users &amp; Live Presence
+              </h2>
+              <p className="text-xs text-[#5A4A66] dark:text-[#BBAAC9] mt-1">
+                Lists every verified email that has signed in to YAO English Teacher Hub. A glowing{' '}
+                <strong className="text-emerald-700 dark:text-emerald-400">green light</strong>{' '}
+                shows who is actively using the app right now.
+              </p>
+            </div>
+            <div className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/70 text-xs font-bold text-emerald-800 dark:text-emerald-300 shrink-0">
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
+              </span>
+              {onlineUsersCount} online · {sortedActiveUsers.length} registered
+            </div>
+          </div>
+
+          {sortedActiveUsers.length === 0 ? (
+            <p className="text-sm text-[#5A4A66] dark:text-[#BBAAC9] py-6 text-center">
+              No signed-in user sessions recorded yet.
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead className="border-b border-[#E5D9EC] dark:border-[#332442] text-xs text-[#5A4A66] dark:text-[#BBAAC9]">
+                  <tr>
+                    <th className="py-2.5 pr-4">Status</th>
+                    <th className="py-2.5 pr-4">User</th>
+                    <th className="py-2.5 pr-4">Signed-in Email</th>
+                    <th className="py-2.5 pr-4">Role &amp; Profile</th>
+                    <th className="py-2.5 pr-4">Activity</th>
+                    {isPrimaryOwner && <th className="py-2.5 text-right">Quick Access</th>}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#F0E6F5] dark:divide-[#2E203D]">
+                  {sortedActiveUsers.map((u) => {
+                    const online = isPresenceOnline(u, nowMs);
+                    const lastMs = u.lastSeenAt?.toMillis?.() ?? 0;
+                    const firstMs = u.firstSignedInAt?.toMillis?.() ?? 0;
+                    const lowerEmail = u.email.toLowerCase();
+                    const isOwnerRow = lowerEmail === BOOTSTRAPPED_ADMIN_EMAIL;
+                    const allowEntry = allowlist.find(
+                      (a) => a.email.toLowerCase() === lowerEmail
+                    );
+                    const effectiveRole: UserRole = isOwnerRow
+                      ? 'admin'
+                      : allowEntry?.role || u.role;
+                    const teacherCard = teachers.find((t) => t.uid === u.uid);
+
+                    return (
+                      <tr
+                        key={u.uid}
+                        className={
+                          online ? 'bg-emerald-50/35 dark:bg-emerald-950/15' : undefined
+                        }
+                      >
+                        <td className="py-3 pr-4 whitespace-nowrap">
+                          {online ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-100 dark:bg-emerald-950/70 text-emerald-800 dark:text-emerald-300 text-[11px] font-bold">
+                              <span className="relative flex h-2.5 w-2.5">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
+                              </span>
+                              Online now
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#F4EEF7] dark:bg-[#2A1D38] text-[#6A5A78] dark:text-[#BBAAC9] text-[11px] font-semibold">
+                              <span className="w-2 h-2 rounded-full bg-gray-400 dark:bg-gray-500" />
+                              Offline
+                            </span>
+                          )}
+                        </td>
+
+                        <td className="py-3 pr-4">
+                          <div className="flex items-center gap-2.5">
+                            <div className="relative shrink-0">
+                              {u.photoUrl ? (
+                                <img
+                                  src={u.photoUrl}
+                                  alt={u.displayName}
+                                  className="w-9 h-9 rounded-xl object-cover border border-[#E5D9EC] dark:border-[#332442]"
+                                  referrerPolicy="no-referrer"
+                                />
+                              ) : (
+                                <div className="w-9 h-9 rounded-xl bg-[#3B1050] text-white text-xs font-bold flex items-center justify-center">
+                                  {getInitials(u.displayName)}
+                                </div>
+                              )}
+                              <span
+                                className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white dark:border-[#1F1629] ${
+                                  online ? 'bg-emerald-500' : 'bg-gray-400 dark:bg-gray-600'
+                                }`}
+                              />
+                            </div>
+                            <div className="min-w-0">
+                              <p className="font-semibold text-[#1F122B] dark:text-[#F5EEF9] truncate max-w-[170px]">
+                                {teacherCard?.displayName || u.displayName}
+                              </p>
+                              {firstMs > 0 && (
+                                <p className="text-[10px] text-[#7A6888] dark:text-[#9D8AAD]">
+                                  Joined {formatLocalDateTime(new Date(firstMs).toISOString())}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+
+                        <td className="py-3 pr-4 font-mono text-xs text-[#3A2847] dark:text-[#DFD0EC]">
+                          {u.email}
+                        </td>
+
+                        <td className="py-3 pr-4 whitespace-nowrap">
+                          <div className="space-y-0.5">
+                            <span
+                              className={`inline-block px-2 py-0.5 rounded-md text-[11px] font-bold ${
+                                isOwnerRow
+                                  ? 'bg-[#3B1050] text-white'
+                                  : effectiveRole === 'admin'
+                                    ? 'bg-[#A8567F] text-white'
+                                    : effectiveRole === 'teacher'
+                                      ? 'bg-[#F4EEF7] dark:bg-[#2A1D38] text-[#3B1050] dark:text-[#E8D5F5]'
+                                      : 'bg-amber-100 dark:bg-amber-950/60 text-amber-900 dark:text-amber-300'
+                              }`}
+                            >
+                              {isOwnerRow
+                                ? 'Owner'
+                                : effectiveRole === 'admin'
+                                  ? 'Editor / Admin'
+                                  : effectiveRole === 'teacher'
+                                    ? 'Teacher'
+                                    : 'View-Only'}
+                            </span>
+                            {effectiveRole === 'teacher' && (
+                              <p className="text-[10px] text-[#5A4A66] dark:text-[#BBAAC9]">
+                                {teacherCard?.onboardingComplete
+                                  ? 'Intro card complete'
+                                  : 'Intro card pending'}
+                              </p>
+                            )}
+                          </div>
+                        </td>
+
+                        <td className="py-3 pr-4 text-xs text-[#5A4A66] dark:text-[#BBAAC9] whitespace-nowrap">
+                          {online ? (
+                            <span className="font-semibold text-emerald-700 dark:text-emerald-400">
+                              Viewing {TAB_LABELS[u.currentTab] || u.currentTab || 'Hub'}
+                            </span>
+                          ) : (
+                            <span>
+                              Last seen {formatRelativeLastSeen(lastMs, nowMs)}
+                            </span>
+                          )}
+                        </td>
+
+                        {isPrimaryOwner && (
+                          <td className="py-3 text-right whitespace-nowrap">
+                            {isOwnerRow ? (
+                              <span className="text-xs text-[#7A6888] dark:text-[#9D8AAD]">
+                                Owner
+                              </span>
+                            ) : effectiveRole === 'viewer' ? (
+                              <button
+                                type="button"
+                                disabled={promotingEmail === lowerEmail}
+                                onClick={() => handleQuickGrantTeacher(u)}
+                                className="min-h-[34px] inline-flex items-center gap-1 px-3 py-1 rounded-lg bg-[#3B1050] hover:bg-[#4E1869] text-white text-xs font-semibold disabled:opacity-50"
+                              >
+                                <UserPlus className="w-3.5 h-3.5" />
+                                {promotingEmail === lowerEmail ? 'Granting...' : 'Make Teacher'}
+                              </button>
+                            ) : (
+                              <span className="text-xs text-emerald-700 dark:text-emerald-400 font-semibold">
+                                Registered
+                              </span>
+                            )}
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
       )}
 
       {/* TAB 1B: Live Teacher Submissions Hub */}
@@ -1014,6 +1427,7 @@ export function AdminPage() {
                 ) : (
                   allowlist.map((entry) => {
                     const isOwnerRow = entry.email.toLowerCase() === BOOTSTRAPPED_ADMIN_EMAIL;
+                    const isEntryOnline = onlineEmailSet.has(entry.email.toLowerCase());
                     const roleLabel = isOwnerRow
                       ? 'Owner · Full Edit'
                       : entry.role === 'admin'
@@ -1023,7 +1437,24 @@ export function AdminPage() {
                           : 'View Only (Cannot Edit)';
                     return (
                       <tr key={entry.id}>
-                        <td className="py-3 pr-4 font-medium">{entry.displayName}</td>
+                        <td className="py-3 pr-4 font-medium">
+                          <div className="flex items-center gap-2">
+                            <span
+                              title={isEntryOnline ? 'Online now' : 'Offline'}
+                              className="relative flex h-2.5 w-2.5 shrink-0"
+                            >
+                              {isEntryOnline && (
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                              )}
+                              <span
+                                className={`relative inline-flex rounded-full h-2.5 w-2.5 ${
+                                  isEntryOnline ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-600'
+                                }`}
+                              />
+                            </span>
+                            <span>{entry.displayName}</span>
+                          </div>
+                        </td>
                         <td className="py-3 pr-4 font-mono text-xs">{entry.email}</td>
                         <td className="py-3 pr-4">
                           <span className="text-xs font-semibold text-[#3B1050] dark:text-[#E2B8D0]">

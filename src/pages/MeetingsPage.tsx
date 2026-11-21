@@ -50,6 +50,7 @@ import {
 } from '../utils/helpers';
 import { notifyAdminOfTeacherAction } from '../utils/notifications';
 import { dispatchPreviewMeetingToast } from '../components/MeetingReminderToast';
+import { MeetingsCalendar } from '../components/MeetingsCalendar';
 import type { MeetingAgendaItem, WeeklyMeetingOption } from '../types';
 
 const WEEKLY_MEETING_OPTIONS: Array<{
@@ -87,6 +88,8 @@ export function MeetingsPage() {
     canInteract,
     myProfile,
     oneToOneSlots,
+    trainingSessions,
+    observations,
     weeklyMeetingVotes,
     weeklyMeetingInfo,
     meetingAgendaItems,
@@ -496,6 +499,22 @@ export function MeetingsPage() {
           Preview 10-min alert
         </button>
       </div>
+
+      {/* 0. MONTHLY SESSIONS CALENDAR VIEW (Myanmar Time · MMT) */}
+      <MeetingsCalendar
+        oneToOneSlots={oneToOneSlots}
+        trainingSessions={trainingSessions}
+        observations={observations}
+        weeklyMeetingInfo={weeklyMeetingInfo}
+        myVote={myVote}
+        myUid={user?.uid || ''}
+        isAdmin={isAdmin}
+        canInteract={canInteract}
+        hasMyBookedSlot={Boolean(mySlot)}
+        busySlotId={busySlotId}
+        onBookSlot={handleBookSlot}
+        onCancelSlot={handleCancelSlot}
+      />
 
       {/* 1. ACADEMIC TEAM MEETING — WEEKLY WITH TR YAO (POLL) */}
       <section className="bg-white dark:bg-[#1F1629] rounded-2xl border-2 border-[#A8567F]/40 dark:border-[#6D3A58] p-5 sm:p-6 shadow-sm space-y-5">

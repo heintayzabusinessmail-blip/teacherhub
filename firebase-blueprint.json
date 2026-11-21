@@ -650,6 +650,33 @@
         "createdAt",
         "updatedAt"
       ]
+    },
+    "UserPresence": {
+      "title": "UserPresence",
+      "description": "Registered signed-in user record with verified email and real-time online heartbeat (strictly admin + self readable).",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128 },
+        "email": { "type": "string", "maxLength": 200 },
+        "displayName": { "type": "string", "maxLength": 120 },
+        "role": { "type": "string", "enum": ["admin", "teacher", "viewer"] },
+        "photoUrl": { "type": "string", "maxLength": 150000 },
+        "isOnline": { "type": "boolean" },
+        "currentTab": { "type": "string", "maxLength": 40 },
+        "firstSignedInAt": { "type": "string", "format": "date-time" },
+        "lastSeenAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "uid",
+        "email",
+        "displayName",
+        "role",
+        "photoUrl",
+        "isOnline",
+        "currentTab",
+        "firstSignedInAt",
+        "lastSeenAt"
+      ]
     }
   },
   "firestore": {
@@ -752,6 +779,10 @@
     "/lessonPlans/{planId}": {
       "schema": { "$ref": "#/entities/LessonPlanSubmission" },
       "description": "Private weekly lesson plan submissions and coordinator feedback per teacher."
+    },
+    "/userPresence/{uid}": {
+      "schema": { "$ref": "#/entities/UserPresence" },
+      "description": "PII-isolated registry of every signed-in user email and real-time online heartbeat visible to admins."
     }
   }
 }

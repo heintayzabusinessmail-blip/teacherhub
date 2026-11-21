@@ -86,6 +86,66 @@ export function getNextMyanmarSundaySlotIso(hour24: number, now: Date = new Date
   return new Date(targetMs).toISOString();
 }
 
+export interface MyanmarDateParts {
+  year: number;
+  month: number; // 0-indexed (0 = Jan, 11 = Dec)
+  day: number; // 1-31
+  dayOfWeek: number; // 0 = Sun, 6 = Sat
+}
+
+/**
+ * Returns year, 0-indexed month, day, and day-of-week in Myanmar Time (UTC+06:30).
+ */
+export function getMyanmarDateParts(dateOrIso: Date | string = new Date()): MyanmarDateParts {
+  const d = typeof dateOrIso === 'string' ? new Date(dateOrIso) : dateOrIso;
+  const safeMs = Number.isNaN(d.getTime()) ? Date.now() : d.getTime();
+  const shifted = new Date(safeMs + MYANMAR_OFFSET_MS);
+  return {
+    year: shifted.getUTCFullYear(),
+    month: shifted.getUTCMonth(),
+    day: shifted.getUTCDate(),
+    dayOfWeek: shifted.getUTCDay(),
+  };
+}
+
+export function toDateKey(year: number, monthZeroIndexed: number, day: number): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${year}-${pad(monthZeroIndexed + 1)}-${pad(day)}`;
+}
+
+export function getMyanmarDateKey(dateOrIso: Date | string = new Date()): string {
+  const { year, month, day } = getMyanmarDateParts(dateOrIso);
+  return toDateKey(year, month, day);
+}
+
+/**
+ * Builds a UTC ISO string for a specific year/month/day/hour/minute in Myanmar Time (UTC+06:30).
+ */
+export function myanmarYmdHmToIso(
+  year: number,
+  monthZeroIndexed: number,
+  day: number,
+  hour24: number,
+  minute = 0
+): string {
+  const ms = Date.UTC(year, monthZeroIndexed, day, hour24, minute, 0, 0) - MYANMAR_OFFSET_MS;
+  return new Date(ms).toISOString();
+}
+
+export function formatRelativeLastSeen(ms: number | null | undefined, nowMs = Date.now()): string {
+  if (!ms) return 'Unknown';
+  const diffSec = Math.max(0, Math.floor((nowMs - ms) / 1000));
+  if (diffSec < 45) return 'Just now';
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  const diffDays = Math.floor(diffHr / 24);
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return formatShortDate(new Date(ms).toISOString());
+}
+
+
 /**
  * Converts an ISO timestamp (or Date) into a YYYY-MM-DDTHH:mm string in Myanmar Time (UTC+06:30)
  * for <input type="datetime-local" /> controls.

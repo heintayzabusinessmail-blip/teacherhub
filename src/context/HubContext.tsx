@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { onAuthStateChanged, type User } from 'firebase/auth';
 import {
   collection,
@@ -7,6 +7,9 @@ import {
   getDoc,
   onSnapshot,
   query,
+  serverTimestamp,
+  setDoc,
+  updateDoc,
   where,
 } from 'firebase/firestore';
 import {
@@ -41,6 +44,7 @@ import type {
   TeacherWeeklyCheckin,
   TrainingResponse,
   TrainingSession,
+  UserPresenceDoc,
   UserRole,
   WeeklyMeetingInfo,
   WeeklyMeetingVote,
@@ -96,6 +100,8 @@ interface HubContextValue {
   welcomePackItems: WelcomePackItem[];
   myWelcomeProgress: WelcomeProgressDoc | null;
   lessonPlans: LessonPlanSubmission[];
+  userPresences: UserPresenceDoc[];
+  reportActiveTab: (tab: string) => void;
   hasSampleData: boolean;
 }
 
@@ -153,6 +159,9 @@ export function HubProvider({ children }: { children: React.ReactNode }) {
   const [welcomePackItems, setWelcomePackItems] = useState<WelcomePackItem[]>([]);
   const [myWelcomeProgress, setMyWelcomeProgress] = useState<WelcomeProgressDoc | null>(null);
   const [lessonPlans, setLessonPlans] = useState<LessonPlanSubmission[]>([]);
+  const [userPresences, setUserPresences] = useState<UserPresenceDoc[]>([]);
+  const activeTabRef = useRef<string>('home');
+  const presenceDocExistsRef = useRef<boolean>(false);
 
   // Apply dark mode class to <html>
   useEffect(() => {
@@ -269,6 +278,8 @@ export function HubProvider({ children }: { children: React.ReactNode }) {
       setWelcomePackItems([]);
       setMyWelcomeProgress(null);
       setLessonPlans([]);
+      setUserPresences([]);
+      presenceDocExistsRef.current = false;
       setProfileLoaded(false);
       setSyncError(null);
       return;
@@ -662,8 +673,23 @@ export function HubProvider({ children }: { children: React.ReactNode }) {
           (err) => reportSnapshotError(err, OperationType.LIST, 'weeklyCheckins/all')
         )
       );
+      unsubs.push(
+        onSnapshot(
+          collection(db, 'userPresence'),
+          (snap) => {
+            const list = snap.docs.map((d) => ({
+              ...(d.data() as UserPresenceDoc),
+              uid: d.id,
+            }));
+            list.sort((a, b) => (b.lastSeenAt?.toMillis?.() ?? 0) - (a.lastSeenAt?.toMillis?.() ?? 0));
+            setUserPresences(list);
+          },
+          (err) => reportSnapshotError(err, OperationType.LIST, 'userPresence')
+        )
+      );
     } else {
       setAllWeeklyCheckins([]);
+      setUserPresences([]);
     }
 
     // 14. Teacher's own Weekly Feedback & Challenges (stored under /teachers/{uid}/weeklyCheckins)
@@ -819,6 +845,95 @@ export function HubProvider({ children }: { children: React.ReactNode }) {
     return teachers.find((t) => t.uid === user.uid) || null;
   }, [teachers, user]);
 
+  // Live Presence & Registered Signed-In User Heartbeat (tracks EVERY signed-in email for Admin Dashboard)
+  const writePresenceHeartbeat = useCallback(
+    async (online: boolean, tabOverride?: string) => {
+      if (!user || !user.email || !isAllowed || authLoading) return;
+      const ref = doc(db, 'userPresence', user.uid);
+      const cleanEmail = user.email.toLowerCase().slice(0, 200);
+      const displayName = (
+        myProfile?.displayName ||
+        user.displayName ||
+        cleanEmail.split('@')[0] ||
+        'YAO User'
+      ).slice(0, 120);
+      const photoUrl = (myProfile?.photoUrl || user.photoURL || '').slice(0, 150000);
+      const currentTab = (tabOverride ?? activeTabRef.current ?? 'home').slice(0, 40);
+
+      try {
+        if (!presenceDocExistsRef.current) {
+          const existingSnap = await getDoc(ref);
+          if (existingSnap.exists()) {
+            presenceDocExistsRef.current = true;
+          } else {
+            await setDoc(ref, {
+              uid: user.uid,
+              email: cleanEmail,
+              displayName,
+              role,
+              photoUrl,
+              isOnline: online,
+              currentTab,
+              firstSignedInAt: serverTimestamp(),
+              lastSeenAt: serverTimestamp(),
+            });
+            presenceDocExistsRef.current = true;
+            return;
+          }
+        }
+        await updateDoc(ref, {
+          displayName,
+          role,
+          photoUrl,
+          isOnline: online,
+          currentTab,
+          lastSeenAt: serverTimestamp(),
+        });
+      } catch (err) {
+        // Non-fatal: never crash a user's workspace if a background presence ping fails
+        console.warn('Presence heartbeat skipped:', err);
+      }
+    },
+    [user, isAllowed, authLoading, role, myProfile?.displayName, myProfile?.photoUrl]
+  );
+
+  const reportActiveTab = useCallback(
+    (tab: string) => {
+      activeTabRef.current = tab;
+      void writePresenceHeartbeat(true, tab);
+    },
+    [writePresenceHeartbeat]
+  );
+
+  useEffect(() => {
+    if (!user || !user.email || !isAllowed || authLoading) return;
+
+    void writePresenceHeartbeat(document.visibilityState !== 'hidden');
+
+    const heartbeatId = window.setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        void writePresenceHeartbeat(true);
+      }
+    }, 45_000);
+
+    const handleVisibility = () => {
+      void writePresenceHeartbeat(document.visibilityState === 'visible');
+    };
+
+    const handlePageHide = () => {
+      void writePresenceHeartbeat(false);
+    };
+
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('pagehide', handlePageHide);
+
+    return () => {
+      window.clearInterval(heartbeatId);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('pagehide', handlePageHide);
+    };
+  }, [user, isAllowed, authLoading, writePresenceHeartbeat]);
+
   const hasSampleData = useMemo(() => {
     return (
       teachers.some((t) => t.isSample) ||
@@ -876,6 +991,8 @@ export function HubProvider({ children }: { children: React.ReactNode }) {
     welcomePackItems,
     myWelcomeProgress,
     lessonPlans,
+    userPresences,
+    reportActiveTab,
     hasSampleData,
   };
 

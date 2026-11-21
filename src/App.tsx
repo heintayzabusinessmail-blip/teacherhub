@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { HubProvider, useHub } from './context/HubContext';
 import { AuthGate } from './components/AuthGate';
@@ -22,9 +22,24 @@ import { isTeacherProfileComplete } from './utils/profileValidation';
 import type { NavTab } from './types';
 
 function HubRouter() {
-  const { user, authLoading, isAllowed, isAdmin, isViewer, myProfile, profileLoaded, syncError } =
-    useHub();
+  const {
+    user,
+    authLoading,
+    isAllowed,
+    isAdmin,
+    isViewer,
+    myProfile,
+    profileLoaded,
+    syncError,
+    reportActiveTab,
+  } = useHub();
   const [activeTab, setActiveTab] = useState<NavTab>('home');
+
+  useEffect(() => {
+    if (user && isAllowed) {
+      reportActiveTab(activeTab);
+    }
+  }, [activeTab, user, isAllowed, reportActiveTab]);
 
   if (syncError) {
     throw syncError;

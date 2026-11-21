@@ -12,6 +12,8 @@ import {
   getFirestore,
   doc,
   getDocFromServer,
+  serverTimestamp,
+  updateDoc,
 } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 
@@ -130,5 +132,16 @@ export async function completeEmailLinkWithAddress(email: string) {
 }
 
 export async function signOutUser() {
+  const currentUid = auth.currentUser?.uid;
+  if (currentUid) {
+    try {
+      await updateDoc(doc(db, 'userPresence', currentUid), {
+        isOnline: false,
+        lastSeenAt: serverTimestamp(),
+      });
+    } catch {
+      // Ignore if presence doc does not exist yet or user is offline
+    }
+  }
   return signOut(auth);
 }

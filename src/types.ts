@@ -384,5 +384,14 @@ export interface LessonPlanSubmission {
   updatedAt?: Timestamp | null;
 }
 
-
-
+export interface UserPresenceDoc {
+  uid: string;
+  email: string;
+  displayName: string;
+  role: UserRole;
+  photoUrl: string;
+  isOnline: boolean;
+  currentTab: string;
+  firstSignedInAt?: Timestamp | null;
+  lastSeenAt?: Timestamp | null;
+}
