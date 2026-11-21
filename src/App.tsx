@@ -11,6 +11,7 @@ import { TeamPage } from './pages/TeamPage';
 import { ResourcesPage } from './pages/ResourcesPage';
 import { TrainingPage } from './pages/TrainingPage';
 import { MyMonth1Page } from './pages/MyMonth1Page';
+import { MeetingsPage } from './pages/MeetingsPage';
 import { VoicePage } from './pages/VoicePage';
 import { ToolsPage } from './pages/ToolsPage';
 import { GoodPracticePage } from './pages/GoodPracticePage';
@@ -89,6 +90,7 @@ function HubRouter() {
       {activeTab === 'resources' && <ResourcesPage />}
       {activeTab === 'training' && <TrainingPage />}
       {activeTab === 'my-month-1' && <MyMonth1Page onNavigate={setActiveTab} />}
+      {activeTab === 'meetings' && <MeetingsPage />}
       {activeTab === 'voice' && <VoicePage />}
       {activeTab === 'tools' && <ToolsPage />}
       {activeTab === 'good-practice' && <GoodPracticePage />}

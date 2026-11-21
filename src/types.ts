@@ -10,6 +10,7 @@ export type NavTab =
   | 'resources'
   | 'training'
   | 'my-month-1'
+  | 'meetings'
   | 'voice'
   | 'tools'
   | 'good-practice'
@@ -270,6 +271,8 @@ export type NotificationCategory =
   | 'survey_submitted'
   | 'meeting_booked'
   | 'meeting_cancelled'
+  | 'weekly_feedback'
+  | 'weekly_meeting_vote'
   | 'faq_asked'
   | 'resource_suggested'
   | 'admin_notice';
@@ -287,4 +290,31 @@ export interface HubNotification {
   readByAdmin: boolean;
   createdAt?: Timestamp | null;
 }
+
+export type WeeklyCheckinMood = 'going_well' | 'okay' | 'need_support';
+
+export interface TeacherWeeklyCheckin {
+  id: string;
+  uid: string;
+  teacherName: string;
+  weekLabel: string;
+  mood: WeeklyCheckinMood;
+  wins: string;
+  challenges: string;
+  createdAt?: Timestamp | null;
+  updatedAt?: Timestamp | null;
+}
+
+export type WeeklyMeetingOption = 'sun_3_4_pm' | 'sun_5_6_pm' | 'other';
+
+export interface WeeklyMeetingVote {
+  uid: string;
+  teacherName: string;
+  selectedOption: WeeklyMeetingOption;
+  suggestedTime: string;
+  note: string;
+  createdAt?: Timestamp | null;
+  updatedAt?: Timestamp | null;
+}
+
 

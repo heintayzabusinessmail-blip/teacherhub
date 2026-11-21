@@ -456,6 +456,8 @@
             "survey_submitted",
             "meeting_booked",
             "meeting_cancelled",
+            "weekly_feedback",
+            "weekly_meeting_vote",
             "faq_asked",
             "resource_suggested",
             "admin_notice"
@@ -482,6 +484,54 @@
         "readByAdmin",
         "createdAt"
       ]
+    },
+    "TeacherWeeklyCheckin": {
+      "title": "TeacherWeeklyCheckin",
+      "description": "Weekly teacher feedback, wins, and challenges stored directly under the teacher's profile.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "teacherName": { "type": "string", "maxLength": 120 },
+        "weekLabel": { "type": "string", "maxLength": 60 },
+        "mood": { "type": "string", "enum": ["going_well", "okay", "need_support"] },
+        "wins": { "type": "string", "maxLength": 800 },
+        "challenges": { "type": "string", "maxLength": 1200 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "uid",
+        "teacherName",
+        "weekLabel",
+        "mood",
+        "wins",
+        "challenges",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "WeeklyMeetingVote": {
+      "title": "WeeklyMeetingVote",
+      "description": "Teacher vote or suggested alternative time for the Weekly Academic Team Meeting with Tr YAO (Myanmar Time).",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "teacherName": { "type": "string", "maxLength": 120 },
+        "selectedOption": { "type": "string", "enum": ["sun_3_4_pm", "sun_5_6_pm", "other"] },
+        "suggestedTime": { "type": "string", "maxLength": 200 },
+        "note": { "type": "string", "maxLength": 400 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "uid",
+        "teacherName",
+        "selectedOption",
+        "suggestedTime",
+        "note",
+        "createdAt",
+        "updatedAt"
+      ]
     }
   },
   "firestore": {
@@ -493,6 +543,10 @@
       "schema": { "$ref": "#/entities/TeacherProfile" },
       "description": "Public team directory cards and personal Month 1 checklist."
     },
+    "/teachers/{uid}/weeklyCheckins/{checkinId}": {
+      "schema": { "$ref": "#/entities/TeacherWeeklyCheckin" },
+      "description": "Private weekly feedback and classroom challenges submitted under each teacher's profile."
+    },
     "/hubConfig/{configId}": {
       "schema": { "$ref": "#/entities/HubConfig" },
       "description": "Admin-managed pinned note, spotlight, icebreaker, and progress."
@@ -503,7 +557,7 @@
     },
     "/curriculumMaps/{levelId}": {
       "schema": { "$ref": "#/entities/CurriculumMap" },
-      "description": "Curriculum map entries per level (A2, B1, B2, One-to-One)."
+      "description": "Curriculum map entries per level (A2, B1, B2, IELTS, One-to-One)."
     },
     "/curriculumMaps/{levelId}/comments/{commentId}": {
       "schema": { "$ref": "#/entities/CurriculumComment" },
@@ -532,6 +586,10 @@
     "/oneToOneSlots/{slotId}": {
       "schema": { "$ref": "#/entities/OneToOneSlot" },
       "description": "Bookable 1-to-1 meeting slots managed by admin."
+    },
+    "/weeklyMeetingVotes/{uid}": {
+      "schema": { "$ref": "#/entities/WeeklyMeetingVote" },
+      "description": "Teacher time selections (Sunday 3-4 PM / 5-6 PM MMT or suggested time) for the Academic Team Weekly Meeting with Tr YAO."
     },
     "/observations/{obsId}": {
       "schema": { "$ref": "#/entities/Observation" },

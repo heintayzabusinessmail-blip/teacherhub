@@ -798,8 +798,9 @@ export function NotificationBar({ onSelectTab }: NotificationBarProps) {
                       className="min-h-[40px] px-2.5 py-1.5 rounded-xl border border-[#E5D9EC] dark:border-[#332442] bg-white dark:bg-[#1F1629] text-xs"
                     >
                       <option value="">Link button: None</option>
+                      <option value="meetings">Link to: Meetings (Weekly &amp; 1-to-1)</option>
+                      <option value="my-month-1">Link to: My Month 1 (Checklist &amp; Weekly Feedback)</option>
                       <option value="voice">Link to: Teacher Voice &amp; Survey</option>
-                      <option value="my-month-1">Link to: My Month 1 (1-to-1 Booking)</option>
                       <option value="training">Link to: Training</option>
                       <option value="resources">Link to: Resource Library</option>
                       <option value="roadmap">Link to: 6-Month Roadmap</option>

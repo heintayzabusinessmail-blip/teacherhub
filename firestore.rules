@@ -433,6 +433,7 @@ service cloud.firestore {
         && data.audience in ['admin', 'teachers', 'all']
         && data.category in [
           'survey_submitted', 'meeting_booked', 'meeting_cancelled',
+          'weekly_feedback', 'weekly_meeting_vote',
           'faq_asked', 'resource_suggested', 'admin_notice'
         ]
         && data.priority in ['normal', 'important']
@@ -443,6 +444,44 @@ service cloud.firestore {
         && isValidString(data.targetTab, 0, 40)
         && data.readByAdmin is bool
         && data.createdAt is timestamp;
+    }
+
+    function isValidWeeklyCheckin(data) {
+      return data.keys().hasAll([
+          'uid', 'teacherName', 'weekLabel', 'mood', 'wins', 'challenges',
+          'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'uid', 'teacherName', 'weekLabel', 'mood', 'wins', 'challenges',
+          'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.uid)
+        && isValidString(data.teacherName, 1, 120)
+        && isValidString(data.weekLabel, 1, 60)
+        && data.mood in ['going_well', 'okay', 'need_support']
+        && isValidString(data.wins, 0, 800)
+        && isValidString(data.challenges, 1, 1200)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidWeeklyMeetingVote(data) {
+      return data.keys().hasAll([
+          'uid', 'teacherName', 'selectedOption', 'suggestedTime', 'note',
+          'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'uid', 'teacherName', 'selectedOption', 'suggestedTime', 'note',
+          'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.uid)
+        && isValidString(data.teacherName, 1, 120)
+        && data.selectedOption in ['sun_3_4_pm', 'sun_5_6_pm', 'other']
+        && isValidString(data.suggestedTime, 0, 200)
+        && (data.selectedOption != 'other' || data.suggestedTime.size() >= 2)
+        && isValidString(data.note, 0, 400)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
     }
 
     // =========================================================================
@@ -490,6 +529,39 @@ service cloud.firestore {
           )
         );
       allow delete: if isAdmin() && isValidId(uid);
+
+      // 2b. Private Weekly Feedback & Challenges stored under each teacher's profile (Master Gate)
+      match /weeklyCheckins/{checkinId} {
+        allow get: if isValidId(uid) && isValidId(checkinId)
+          && (isAdmin() || (isInteractiveUser() && uid == request.auth.uid && existing().uid == request.auth.uid));
+        allow list: if isAdmin()
+          || (isInteractiveUser() && uid == request.auth.uid && resource.data.uid == request.auth.uid);
+        allow create: if isInteractiveUser() && isValidId(uid) && isValidId(checkinId)
+          && exists(/databases/$(database)/documents/teachers/$(uid))
+          && isValidWeeklyCheckin(incoming())
+          && uid == request.auth.uid
+          && incoming().uid == request.auth.uid
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time;
+        allow update: if isInteractiveUser() && isValidId(uid) && isValidId(checkinId)
+          && exists(/databases/$(database)/documents/teachers/$(uid))
+          && isValidWeeklyCheckin(incoming())
+          && incoming().uid == existing().uid
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && (
+            isAdmin()
+            || (
+              uid == request.auth.uid
+              && existing().uid == request.auth.uid
+              && incoming().diff(existing()).affectedKeys().hasOnly([
+                'teacherName', 'weekLabel', 'mood', 'wins', 'challenges', 'updatedAt'
+              ])
+            )
+          );
+        allow delete: if isInteractiveUser() && isValidId(uid) && isValidId(checkinId)
+          && (isAdmin() || (uid == request.auth.uid && existing().uid == request.auth.uid));
+      }
     }
 
     // 3. Hub Configuration (Pinned message, spotlight, icebreaker, progress)
@@ -838,6 +910,7 @@ service cloud.firestore {
             incoming().audience == 'admin'
             && incoming().category in [
               'survey_submitted', 'meeting_booked', 'meeting_cancelled',
+              'weekly_feedback', 'weekly_meeting_vote',
               'faq_asked', 'resource_suggested'
             ]
             && incoming().readByAdmin == false
@@ -848,6 +921,40 @@ service cloud.firestore {
         && incoming().actorUid == existing().actorUid
         && incoming().createdAt == existing().createdAt;
       allow delete: if isAdmin() && isValidId(notifId);
+    }
+
+    // 18. Academic Team Weekly Meeting Votes (Tr YAO Sunday 3-4 PM / 5-6 PM MMT + Other Suggestions)
+    match /weeklyMeetingVotes/{uid} {
+      allow get: if isAllowedUser() && isValidId(uid);
+      allow list: if isAllowedUser();
+      allow create: if isInteractiveUser() && isValidId(uid)
+        && isValidWeeklyMeetingVote(incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && (isAdmin() || (uid == request.auth.uid && incoming().uid == request.auth.uid));
+      allow update: if isInteractiveUser() && isValidId(uid)
+        && isValidWeeklyMeetingVote(incoming())
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin()
+          || (
+            uid == request.auth.uid
+            && existing().uid == request.auth.uid
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'teacherName', 'selectedOption', 'suggestedTime', 'note', 'updatedAt'
+            ])
+          )
+        );
+      allow delete: if isInteractiveUser() && isValidId(uid)
+        && (isAdmin() || (uid == request.auth.uid && existing().uid == request.auth.uid));
+    }
+
+    // 19. Admin collectionGroup read for teachers' weekly feedback & challenges
+    match /{path=**}/weeklyCheckins/{checkinId} {
+      allow get: if isAdmin() && isValidId(checkinId);
+      allow list: if isAdmin();
     }
   }
 }

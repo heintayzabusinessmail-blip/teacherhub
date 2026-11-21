@@ -1,39 +1,58 @@
 import React, { useMemo, useState } from 'react';
 import {
-  CalendarCheck,
+  ArrowRight,
   CalendarClock,
   CalendarPlus,
   CheckCircle2,
   Circle,
+  ClipboardEdit,
   Download,
   Eye,
   Lock,
   MessageSquare,
   Send,
+  Trash2,
 } from 'lucide-react';
-import { doc, serverTimestamp, updateDoc } from 'firebase/firestore';
-import {
-  BOOTSTRAPPED_ADMIN_EMAIL,
-  db,
-  emailToKey,
-  handleFirestoreError,
-  OperationType,
-} from '../firebase';
+import { addDoc, collection, deleteDoc, doc, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { db, emailToKey, handleFirestoreError, OperationType } from '../firebase';
 import { useHub } from '../context/HubContext';
 import { PAGE_SUMMARIES } from '../content/planContent';
 import { PageHeader } from '../components/PageHeader';
-import {
-  downloadIcsEvent,
-  formatLocalDateTime,
-  getGoogleCalendarUrl,
-  getViewerTimeZone,
-} from '../utils/helpers';
+import { downloadIcsEvent, formatLocalDateTime, getGoogleCalendarUrl } from '../utils/helpers';
 import { notifyAdminOfTeacherAction } from '../utils/notifications';
-import type { NavTab, ObservationDoc } from '../types';
+import { formatWeeklyOptionLabel } from './MeetingsPage';
+import type { NavTab, ObservationDoc, WeeklyCheckinMood } from '../types';
 
 interface MyMonth1PageProps {
   onNavigate: (tab: NavTab) => void;
 }
+
+const WEEK_OPTIONS = ['Week 1', 'Week 2', 'Week 3', 'Week 4', 'Week 5+'];
+
+const MOOD_OPTIONS: Array<{
+  id: WeeklyCheckinMood;
+  label: string;
+  badgeClass: string;
+}> = [
+  {
+    id: 'going_well',
+    label: 'Going well',
+    badgeClass:
+      'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-300 dark:border-emerald-800/60',
+  },
+  {
+    id: 'okay',
+    label: 'Managing okay',
+    badgeClass:
+      'bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800/60',
+  },
+  {
+    id: 'need_support',
+    label: 'Need support',
+    badgeClass:
+      'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/30 dark:text-rose-300 dark:border-rose-800/60',
+  },
+];
 
 export function MyMonth1Page({ onNavigate }: MyMonth1PageProps) {
   const {
@@ -44,11 +63,19 @@ export function MyMonth1Page({ onNavigate }: MyMonth1PageProps) {
     observations,
     mySurvey,
     trainingResponses,
-    queueEmailConfirmation,
+    myWeeklyCheckins,
+    weeklyMeetingVotes,
   } = useHub();
 
-  const [bookingNotes, setBookingNotes] = useState('');
-  const [busySlotId, setBusySlotId] = useState<string | null>(null);
+  // Weekly Feedback & Challenges form state
+  const [weekLabel, setWeekLabel] = useState('Week 1');
+  const [mood, setMood] = useState<WeeklyCheckinMood>('going_well');
+  const [wins, setWins] = useState('');
+  const [challenges, setChallenges] = useState('');
+  const [savingCheckin, setSavingCheckin] = useState(false);
+  const [checkinSavedMsg, setCheckinSavedMsg] = useState('');
+
+  // Observation reply drafts
   const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
   const [savingReplyId, setSavingReplyId] = useState<string | null>(null);
 
@@ -59,9 +86,9 @@ export function MyMonth1Page({ onNavigate }: MyMonth1PageProps) {
     [oneToOneSlots, user]
   );
 
-  const availableSlots = useMemo(
-    () => oneToOneSlots.filter((s) => !s.bookedByUid),
-    [oneToOneSlots]
+  const myWeeklyVote = useMemo(
+    () => (user ? weeklyMeetingVotes.find((v) => v.uid === user.uid) || null : null),
+    [weeklyMeetingVotes, user]
   );
 
   // Only show observations belonging to the signed-in teacher on My Month 1 (even if signed in as admin!)
@@ -96,8 +123,8 @@ export function MyMonth1Page({ onNavigate }: MyMonth1PageProps) {
       key: 'oneToOneBooked' as const,
       label: 'One-to-one welcome meeting booked (15–20 mins)',
       done: Boolean(mySlot || myProfile?.checklist?.oneToOneBooked),
-      actionLabel: '',
-      tab: null,
+      actionLabel: 'Open Meetings',
+      tab: 'meetings' as NavTab,
     },
     {
       key: 'observationScheduled' as const,
@@ -132,91 +159,60 @@ export function MyMonth1Page({ onNavigate }: MyMonth1PageProps) {
     }
   };
 
-  const handleBookSlot = async (slotId: string) => {
+  const handleSubmitWeeklyCheckin = async (e: React.FormEvent) => {
+    e.preventDefault();
     if (!user || !myProfile || !canInteract) return;
-    setBusySlotId(slotId);
-    const slot = oneToOneSlots.find((s) => s.id === slotId);
-    const trimmedNotes = bookingNotes.trim().slice(0, 300);
+    const trimmedChallenges = challenges.trim().slice(0, 1200);
+    if (!trimmedChallenges) return;
+
+    const trimmedWins = wins.trim().slice(0, 800);
+    const teacherName = myProfile.displayName.slice(0, 120);
+    setSavingCheckin(true);
+    setCheckinSavedMsg('');
+
     try {
-      await updateDoc(doc(db, 'oneToOneSlots', slotId), {
-        bookedByUid: user.uid,
-        bookedByName: myProfile.displayName.slice(0, 120),
-        notes: trimmedNotes,
+      await addDoc(collection(db, 'teachers', user.uid, 'weeklyCheckins'), {
+        uid: user.uid,
+        teacherName,
+        weekLabel: weekLabel.slice(0, 60),
+        mood,
+        wins: trimmedWins,
+        challenges: trimmedChallenges,
+        createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
-      await updateDoc(doc(db, 'teachers', user.uid), {
-        checklist: { ...myProfile.checklist, oneToOneBooked: true },
-        updatedAt: serverTimestamp(),
-      });
-      const whenLabel = slot ? formatLocalDateTime(slot.dateTimeIso) : 'a 1-to-1 slot';
-      const bookTitle = `${myProfile.displayName} booked a 1-to-1 meeting`;
-      const bookMsg = `${slot?.label || '1-to-1 Chat'} on ${whenLabel}${trimmedNotes ? `\nNote: "${trimmedNotes}"` : ''}`;
+
+      const moodLabel = MOOD_OPTIONS.find((m) => m.id === mood)?.label || mood;
       await notifyAdminOfTeacherAction({
         actorUid: user.uid,
-        actorName: myProfile.displayName,
-        category: 'meeting_booked',
-        title: bookTitle,
-        message: bookMsg.slice(0, 600),
+        actorName: teacherName,
+        category: 'weekly_feedback',
+        title: `${teacherName} submitted ${weekLabel} feedback (${moodLabel})`,
+        message: `${trimmedChallenges}${trimmedWins ? `\nWin: ${trimmedWins}` : ''}`.slice(0, 600),
         targetTab: 'admin',
-        priority: 'important',
+        priority: mood === 'need_support' ? 'important' : 'normal',
       });
-      if (user.email?.toLowerCase() !== BOOTSTRAPPED_ADMIN_EMAIL) {
-        queueEmailConfirmation({
-          heading: 'Send 1-to-1 booking email to Tr Hein',
-          recipients: [BOOTSTRAPPED_ADMIN_EMAIL],
-          subject: `[YAO Hub] ${bookTitle} (${whenLabel})`,
-          bodyText: `${bookTitle}\n\nSession: ${bookMsg}\n\nView all bookings in Admin Dashboard.`,
-          senderLabel: `Booked by ${myProfile.displayName}`,
-        });
-      }
-      setBookingNotes('');
+
+      setWins('');
+      setChallenges('');
+      setCheckinSavedMsg(`Saved your ${weekLabel} feedback under your profile!`);
     } catch (err) {
-      handleFirestoreError(err, OperationType.UPDATE, `oneToOneSlots/${slotId}`);
+      handleFirestoreError(err, OperationType.CREATE, `teachers/${user.uid}/weeklyCheckins`);
     } finally {
-      setBusySlotId(null);
+      setSavingCheckin(false);
     }
   };
 
-  const handleCancelSlot = async (slotId: string) => {
-    if (!user || !myProfile || !canInteract) return;
-    setBusySlotId(slotId);
-    const slot = oneToOneSlots.find((s) => s.id === slotId);
+  const handleDeleteCheckin = async (checkinId: string) => {
+    if (!user || !canInteract) return;
     try {
-      await updateDoc(doc(db, 'oneToOneSlots', slotId), {
-        bookedByUid: '',
-        bookedByName: '',
-        notes: '',
-        updatedAt: serverTimestamp(),
-      });
-      await updateDoc(doc(db, 'teachers', user.uid), {
-        checklist: { ...myProfile.checklist, oneToOneBooked: false },
-        updatedAt: serverTimestamp(),
-      });
-      const whenLabel = slot ? formatLocalDateTime(slot.dateTimeIso) : 'their 1-to-1 slot';
-      const cancelTitle = `${myProfile.displayName} cancelled a 1-to-1 booking`;
-      const cancelMsg = `Freed up ${slot?.label || '1-to-1 slot'} on ${whenLabel}.`;
-      await notifyAdminOfTeacherAction({
-        actorUid: user.uid,
-        actorName: myProfile.displayName,
-        category: 'meeting_cancelled',
-        title: cancelTitle,
-        message: cancelMsg,
-        targetTab: 'admin',
-        priority: 'normal',
-      });
-      if (user.email?.toLowerCase() !== BOOTSTRAPPED_ADMIN_EMAIL) {
-        queueEmailConfirmation({
-          heading: 'Email booking cancellation to Tr Hein',
-          recipients: [BOOTSTRAPPED_ADMIN_EMAIL],
-          subject: `[YAO Hub] ${cancelTitle}`,
-          bodyText: `${cancelTitle}\n\n${cancelMsg}`,
-          senderLabel: `Sent by ${myProfile.displayName}`,
-        });
-      }
+      await deleteDoc(doc(db, 'teachers', user.uid, 'weeklyCheckins', checkinId));
     } catch (err) {
-      handleFirestoreError(err, OperationType.UPDATE, `oneToOneSlots/${slotId}`);
-    } finally {
-      setBusySlotId(null);
+      handleFirestoreError(
+        err,
+        OperationType.DELETE,
+        `teachers/${user.uid}/weeklyCheckins/${checkinId}`
+      );
     }
   };
 
@@ -296,142 +292,228 @@ export function MyMonth1Page({ onNavigate }: MyMonth1PageProps) {
         </ul>
       </section>
 
-      {/* 2. Book a One-to-One Meeting */}
-      <section className="bg-white dark:bg-[#1F1629] rounded-2xl border border-[#E5D9EC] dark:border-[#332442] p-5 sm:p-6 shadow-sm space-y-4">
-        <div className="space-y-1">
-          <h2 className="text-lg font-bold text-[#1F122B] dark:text-[#F5EEF9] flex items-center gap-2">
-            <CalendarClock className="w-5 h-5 text-[#A8567F]" />
-            Book Your 1-to-1 Welcome Meeting
-          </h2>
-          <p className="text-xs text-[#5A4A66] dark:text-[#BBAAC9]">
-            A relaxed 15–20 minute chat with Tr Hein (and the Founder where possible) to hear your
-            goals and questions. Times shown in <strong>{getViewerTimeZone()}</strong>.
-          </p>
+      {/* 2. Weekly Feedback & Challenges Form (stored under /teachers/{uid}/weeklyCheckins) */}
+      <section className="bg-white dark:bg-[#1F1629] rounded-2xl border border-[#E5D9EC] dark:border-[#332442] p-5 sm:p-6 shadow-sm space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <h2 className="text-lg font-bold text-[#1F122B] dark:text-[#F5EEF9] flex items-center gap-2">
+              <ClipboardEdit className="w-5 h-5 text-[#A8567F]" />
+              Weekly Feedback &amp; Challenges
+            </h2>
+            <p className="text-xs text-[#5A4A66] dark:text-[#BBAAC9]">
+              Share quick weekly feedback, class challenges, or materials you need — saved privately
+              under your teacher profile for you and Tr Hein.
+            </p>
+          </div>
+          <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#3B1050] dark:text-[#E2B8D0]">
+            <Lock className="w-3.5 h-3.5" />
+            Private to you &amp; Tr Hein
+          </span>
         </div>
 
-        {mySlot ? (
-          <div className="rounded-2xl bg-[#F4EEF7] dark:bg-[#2A1D38] border border-[#E5D9EC] dark:border-[#3E2D52] p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="space-y-1">
-              <p className="text-xs font-bold text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5">
-                <CalendarCheck className="w-4 h-4" />
-                Your booked slot (also shown on Home)
-              </p>
-              <h3 className="text-base font-bold text-[#1F122B] dark:text-[#F5EEF9]">
-                {mySlot.label}
-              </h3>
-              <p className="text-sm text-[#3B1050] dark:text-[#E8D5F5] tabular-nums">
-                {formatLocalDateTime(mySlot.dateTimeIso)} · {mySlot.durationMins} mins
-              </p>
-              {mySlot.notes && (
-                <p className="text-xs text-[#5A4A66] dark:text-[#BBAAC9]">
-                  Your note: {mySlot.notes}
-                </p>
-              )}
+        {canInteract && myProfile ? (
+          <form
+            onSubmit={handleSubmitWeeklyCheckin}
+            className="rounded-2xl bg-[#FAF7FC] dark:bg-[#160F1F] border border-[#E5D9EC] dark:border-[#332442] p-4 sm:p-5 space-y-4"
+          >
+            <div className="grid sm:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-[#3B1050] dark:text-[#E8D5F5]">
+                  Which week?
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  {WEEK_OPTIONS.map((wk) => (
+                    <button
+                      key={wk}
+                      type="button"
+                      onClick={() => setWeekLabel(wk)}
+                      className={`min-h-[36px] px-3 py-1 rounded-xl text-xs font-semibold border transition-colors ${
+                        weekLabel === wk
+                          ? 'bg-[#3B1050] text-white border-[#3B1050]'
+                          : 'bg-white dark:bg-[#1F1629] text-[#3A2847] dark:text-[#DFD0EC] border-[#E5D9EC] dark:border-[#332442]'
+                      }`}
+                    >
+                      {wk}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-[#3B1050] dark:text-[#E8D5F5]">
+                  How did this week feel?
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  {MOOD_OPTIONS.map((m) => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => setMood(m.id)}
+                      className={`min-h-[36px] px-3 py-1 rounded-xl text-xs font-semibold border transition-colors ${
+                        mood === m.id
+                          ? 'bg-[#A8567F] text-white border-[#A8567F]'
+                          : 'bg-white dark:bg-[#1F1629] text-[#3A2847] dark:text-[#DFD0EC] border-[#E5D9EC] dark:border-[#332442]'
+                      }`}
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() =>
-                  downloadIcsEvent({
-                    title: `YAO 1-to-1: ${mySlot.label}`,
-                    startIso: mySlot.dateTimeIso,
-                    durationMins: mySlot.durationMins,
-                    description: mySlot.notes
-                      ? `1-to-1 welcome chat with Tr Hein.\nYour note: ${mySlot.notes}`
-                      : '1-to-1 welcome chat with Tr Hein (YAO English Teacher Hub).',
-                    location: 'Zoom / Online',
-                  })
-                }
-                className="min-h-[42px] inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white dark:bg-[#1F1629] border border-[#E5D9EC] dark:border-[#332442] text-xs font-semibold text-[#3B1050] dark:text-[#E8D5F5] whitespace-nowrap"
-              >
-                <Download className="w-3.5 h-3.5 text-[#A8567F]" />
-                Download .ics
-              </button>
-              <a
-                href={getGoogleCalendarUrl({
-                  title: `YAO 1-to-1: ${mySlot.label}`,
-                  startIso: mySlot.dateTimeIso,
-                  durationMins: mySlot.durationMins,
-                  description: mySlot.notes
-                    ? `1-to-1 welcome chat with Tr Hein.\nYour note: ${mySlot.notes}`
-                    : '1-to-1 welcome chat with Tr Hein (YAO English Teacher Hub).',
-                  location: 'Zoom / Online',
-                })}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="min-h-[42px] inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white dark:bg-[#1F1629] border border-[#E5D9EC] dark:border-[#332442] text-xs font-semibold text-[#3B1050] dark:text-[#E8D5F5] whitespace-nowrap"
-              >
-                <CalendarPlus className="w-3.5 h-3.5 text-[#A8567F]" />
-                Google Calendar
-              </a>
-              <button
-                type="button"
-                disabled={busySlotId === mySlot.id}
-                onClick={() => handleCancelSlot(mySlot.id)}
-                className="min-h-[42px] px-4 py-2 rounded-xl bg-white dark:bg-[#1F1629] border border-[#E5D9EC] dark:border-[#332442] text-xs font-semibold text-red-600 dark:text-red-400 whitespace-nowrap"
-              >
-                {busySlotId === mySlot.id ? 'Updating...' : 'Cancel / change slot'}
-              </button>
-            </div>
-          </div>
-        ) : availableSlots.length === 0 ? (
-          <p className="text-sm text-[#5A4A66] dark:text-[#BBAAC9] py-4">
-            No open slots right now — Tr Hein will post new 1-to-1 slots soon.
-          </p>
-        ) : (
-          <div className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-[#5A4A66] dark:text-[#BBAAC9] mb-1">
-                Optional topic you want to mention (before clicking a slot)
+
+            <div className="space-y-1.5">
+              <label className="block text-xs font-bold text-[#3B1050] dark:text-[#E8D5F5]">
+                Weekly feedback, challenges, or support needed *
               </label>
-              <input
-                type="text"
-                maxLength={300}
-                value={bookingNotes}
-                onChange={(e) => setBookingNotes(e.target.value)}
-                placeholder="e.g., Ideas for my B1 group or a question about materials"
-                className="w-full min-h-[42px] px-3.5 py-2 rounded-xl border border-[#E5D9EC] dark:border-[#332442] bg-[#FAF7FC] dark:bg-[#140D1A] text-sm"
+              <textarea
+                rows={3}
+                required
+                maxLength={1200}
+                value={challenges}
+                onChange={(e) => {
+                  setChallenges(e.target.value);
+                  setCheckinSavedMsg('');
+                }}
+                placeholder="e.g., My B1 students struggled with listening speed, or I need extra IELTS Writing Task 2 sample essays..."
+                className="w-full px-3.5 py-2.5 rounded-xl border border-[#E5D9EC] dark:border-[#332442] bg-white dark:bg-[#1F1629] text-sm"
               />
             </div>
 
-            <div className="grid sm:grid-cols-2 gap-3">
-              {availableSlots.map((slot) => (
-                <div
-                  key={slot.id}
-                  className="p-4 rounded-xl border border-[#E5D9EC] dark:border-[#332442] bg-[#FAF7FC] dark:bg-[#160F1F] flex flex-col justify-between gap-3"
-                >
-                  <div>
-                    <p className="text-sm font-bold text-[#1F122B] dark:text-[#F5EEF9]">
-                      {slot.label}
+            <div className="space-y-1.5">
+              <label className="block text-xs font-semibold text-[#5A4A66] dark:text-[#BBAAC9]">
+                What went well this week? (optional)
+              </label>
+              <input
+                type="text"
+                maxLength={800}
+                value={wins}
+                onChange={(e) => setWins(e.target.value)}
+                placeholder="e.g., Breakout room speaking activity worked really nicely!"
+                className="w-full min-h-[42px] px-3.5 py-2 rounded-xl border border-[#E5D9EC] dark:border-[#332442] bg-white dark:bg-[#1F1629] text-sm"
+              />
+            </div>
+
+            {checkinSavedMsg && (
+              <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 flex items-center gap-2 text-xs font-semibold text-emerald-800 dark:text-emerald-300">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                <span>{checkinSavedMsg}</span>
+              </div>
+            )}
+
+            <div className="flex justify-end">
+              <button
+                type="submit"
+                disabled={savingCheckin || !challenges.trim()}
+                className="min-h-[44px] inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#3B1050] hover:bg-[#4E1869] text-white text-sm font-semibold transition-colors disabled:opacity-50"
+              >
+                <Send className="w-4 h-4" />
+                {savingCheckin ? 'Submitting...' : 'Submit weekly feedback'}
+              </button>
+            </div>
+          </form>
+        ) : (
+          <div className="p-4 rounded-xl bg-[#FAF7FC] dark:bg-[#160F1F] border border-[#E5D9EC] dark:border-[#332442] text-xs text-[#5A4A66] dark:text-[#BBAAC9]">
+            Registered YAO teachers can submit weekly feedback and challenges under their profile here.
+          </div>
+        )}
+
+        {/* Teacher's Own Submitted Weekly Feedback History */}
+        {myWeeklyCheckins.length > 0 && (
+          <div className="space-y-3 pt-2">
+            <h3 className="text-sm font-bold text-[#1F122B] dark:text-[#F5EEF9]">
+              My Saved Weekly Feedback ({myWeeklyCheckins.length})
+            </h3>
+            <div className="space-y-2.5">
+              {myWeeklyCheckins.map((entry) => {
+                const moodDef =
+                  MOOD_OPTIONS.find((m) => m.id === entry.mood) || MOOD_OPTIONS[0];
+                const createdIso = entry.createdAt?.toDate?.()?.toISOString();
+                return (
+                  <article
+                    key={entry.id}
+                    className="p-4 rounded-xl border border-[#E5D9EC] dark:border-[#332442] bg-[#FAF7FC] dark:bg-[#160F1F] space-y-2"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs font-bold text-[#3B1050] dark:text-[#E8D5F5]">
+                          {entry.weekLabel}
+                        </span>
+                        <span
+                          className={`px-2 py-0.5 rounded-md border text-[11px] font-semibold ${moodDef.badgeClass}`}
+                        >
+                          {moodDef.label}
+                        </span>
+                        {createdIso && (
+                          <span className="text-[11px] text-[#7A6888] dark:text-[#9D8AAD] tabular-nums">
+                            · {formatLocalDateTime(createdIso)}
+                          </span>
+                        )}
+                      </div>
+                      {canInteract && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteCheckin(entry.id)}
+                          className="p-1.5 rounded-lg text-[#7A6888] hover:text-red-600 dark:hover:text-red-400"
+                          aria-label="Delete weekly feedback entry"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-sm text-[#1F122B] dark:text-[#F5EEF9] leading-relaxed whitespace-pre-line">
+                      {entry.challenges}
                     </p>
-                    <p className="text-xs text-[#5A4A66] dark:text-[#BBAAC9] mt-0.5 tabular-nums">
-                      {formatLocalDateTime(slot.dateTimeIso)} · {slot.durationMins} mins
-                    </p>
-                  </div>
-                  {canInteract && (
-                    <button
-                      type="button"
-                      disabled={busySlotId === slot.id}
-                      onClick={() => handleBookSlot(slot.id)}
-                      className="min-h-[42px] px-4 py-2 rounded-xl bg-[#3B1050] hover:bg-[#4E1869] text-white text-xs font-semibold transition-colors disabled:opacity-50"
-                    >
-                      {busySlotId === slot.id ? 'Booking...' : 'Pick this slot'}
-                    </button>
-                  )}
-                </div>
-              ))}
+                    {entry.wins && (
+                      <p className="text-xs text-emerald-700 dark:text-emerald-400">
+                        <strong>Went well:</strong> {entry.wins}
+                      </p>
+                    )}
+                  </article>
+                );
+              })}
             </div>
           </div>
         )}
       </section>
 
-      {/* 3. Class Observation Schedule & Private Feedback */}
+      {/* 3. Meetings Quick Summary Card (links cleanly to the separate Meetings tab) */}
+      <section className="bg-white dark:bg-[#1F1629] rounded-2xl border border-[#E5D9EC] dark:border-[#332442] p-5 sm:p-6 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="space-y-1.5">
+          <h2 className="text-base font-bold text-[#1F122B] dark:text-[#F5EEF9] flex items-center gap-2">
+            <CalendarClock className="w-5 h-5 text-[#A8567F]" />
+            Weekly Academic Team Meeting &amp; 1-to-1 Booking
+          </h2>
+          <p className="text-xs text-[#5A4A66] dark:text-[#BBAAC9]">
+            <strong>Tr YAO Weekly Team Meeting:</strong>{' '}
+            {myWeeklyVote
+              ? formatWeeklyOptionLabel(myWeeklyVote.selectedOption, myWeeklyVote.suggestedTime)
+              : 'Not chosen yet (Sunday 3–4 PM / 5–6 PM MMT or suggest another time)'}
+          </p>
+          <p className="text-xs text-[#5A4A66] dark:text-[#BBAAC9]">
+            <strong>1-to-1 Welcome Meeting:</strong>{' '}
+            {mySlot
+              ? `${mySlot.label} (${formatLocalDateTime(mySlot.dateTimeIso)})`
+              : 'Not booked yet'}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => onNavigate('meetings')}
+          className="min-h-[44px] inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#3B1050] hover:bg-[#4E1869] text-white text-xs font-semibold whitespace-nowrap shrink-0 transition-colors"
+        >
+          Open Meetings tab
+          <ArrowRight className="w-4 h-4" />
+        </button>
+      </section>
+
+      {/* 4. Class Observation Schedule & Private Feedback */}
       <section className="bg-white dark:bg-[#1F1629] rounded-2xl border border-[#E5D9EC] dark:border-[#332442] p-5 sm:p-6 shadow-sm space-y-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
             <h2 className="text-lg font-bold text-[#1F122B] dark:text-[#F5EEF9] flex items-center gap-2">
               <Eye className="w-5 h-5 text-[#A8567F]" />
-              My Class Observation & Private Feedback
+              My Class Observation &amp; Private Feedback
             </h2>
             <p className="text-xs text-[#5A4A66] dark:text-[#BBAAC9]">
               Purpose: see where we are now and what you need. Not a test.
@@ -439,7 +521,7 @@ export function MyMonth1Page({ onNavigate }: MyMonth1PageProps) {
           </div>
           <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#3B1050] dark:text-[#E2B8D0]">
             <Lock className="w-3.5 h-3.5" />
-            Private: only you, Tr Hein & the Founder
+            Private: only you, Tr Hein &amp; the Founder
           </span>
         </div>
 
@@ -522,7 +604,8 @@ export function MyMonth1Page({ onNavigate }: MyMonth1PageProps) {
                   </div>
 
                   <p className="text-xs text-[#3B1050] dark:text-[#E2B8D0] bg-white dark:bg-[#1F1629] px-3.5 py-2.5 rounded-xl border border-[#E5D9EC] dark:border-[#332442]">
-                    {obs.purposeNote || 'Purpose: see where we are now and what you need. Not a test.'}
+                    {obs.purposeNote ||
+                      'Purpose: see where we are now and what you need. Not a test.'}
                   </p>
 
                   {/* Private Feedback Details */}
@@ -547,7 +630,9 @@ export function MyMonth1Page({ onNavigate }: MyMonth1PageProps) {
                             ))}
                           </ol>
                         ) : (
-                          <p className="text-[#5A4A66] dark:text-[#BBAAC9]">We will agree these together.</p>
+                          <p className="text-[#5A4A66] dark:text-[#BBAAC9]">
+                            We will agree these together.
+                          </p>
                         )}
                       </div>
                       {obs.supportAgreed && (

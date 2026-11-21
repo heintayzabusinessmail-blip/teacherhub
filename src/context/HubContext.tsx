@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useMemo, useState } from '
 import { onAuthStateChanged, type User } from 'firebase/auth';
 import {
   collection,
+  collectionGroup,
   doc,
   getDoc,
   onSnapshot,
@@ -35,9 +36,11 @@ import type {
   SyllabusEntry,
   TeacherProfile,
   TeacherResourceState,
+  TeacherWeeklyCheckin,
   TrainingResponse,
   TrainingSession,
   UserRole,
+  WeeklyMeetingVote,
 } from '../types';
 
 interface HubContextValue {
@@ -80,6 +83,9 @@ interface HubContextValue {
   suggestions: AnonymousSuggestion[];
   syllabusEntries: SyllabusEntry[];
   notifications: HubNotification[];
+  myWeeklyCheckins: TeacherWeeklyCheckin[];
+  allWeeklyCheckins: TeacherWeeklyCheckin[];
+  weeklyMeetingVotes: WeeklyMeetingVote[];
   hasSampleData: boolean;
 }
 
@@ -129,6 +135,9 @@ export function HubProvider({ children }: { children: React.ReactNode }) {
   const [suggestions, setSuggestions] = useState<AnonymousSuggestion[]>([]);
   const [syllabusEntries, setSyllabusEntries] = useState<SyllabusEntry[]>([]);
   const [notifications, setNotifications] = useState<HubNotification[]>([]);
+  const [myWeeklyCheckins, setMyWeeklyCheckins] = useState<TeacherWeeklyCheckin[]>([]);
+  const [allWeeklyCheckins, setAllWeeklyCheckins] = useState<TeacherWeeklyCheckin[]>([]);
+  const [weeklyMeetingVotes, setWeeklyMeetingVotes] = useState<WeeklyMeetingVote[]>([]);
 
   // Apply dark mode class to <html>
   useEffect(() => {
@@ -237,6 +246,9 @@ export function HubProvider({ children }: { children: React.ReactNode }) {
       setSuggestions([]);
       setSyllabusEntries([]);
       setNotifications([]);
+      setMyWeeklyCheckins([]);
+      setAllWeeklyCheckins([]);
+      setWeeklyMeetingVotes([]);
       setProfileLoaded(false);
       setSyncError(null);
       return;
@@ -616,7 +628,62 @@ export function HubProvider({ children }: { children: React.ReactNode }) {
           (err) => reportSnapshotError(err, OperationType.LIST, 'teacherResourceStates/all')
         )
       );
+      unsubs.push(
+        onSnapshot(
+          collectionGroup(db, 'weeklyCheckins'),
+          (snap) => {
+            const list = snap.docs.map((d) => ({
+              ...(d.data() as TeacherWeeklyCheckin),
+              id: d.id,
+            }));
+            list.sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0));
+            setAllWeeklyCheckins(list);
+          },
+          (err) => reportSnapshotError(err, OperationType.LIST, 'weeklyCheckins/all')
+        )
+      );
+    } else {
+      setAllWeeklyCheckins([]);
     }
+
+    // 14. Teacher's own Weekly Feedback & Challenges (stored under /teachers/{uid}/weeklyCheckins)
+    if (canInteract) {
+      unsubs.push(
+        onSnapshot(
+          query(
+            collection(db, 'teachers', uid, 'weeklyCheckins'),
+            where('uid', '==', uid)
+          ),
+          (snap) => {
+            const list = snap.docs.map((d) => ({
+              ...(d.data() as TeacherWeeklyCheckin),
+              id: d.id,
+            }));
+            list.sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0));
+            setMyWeeklyCheckins(list);
+          },
+          (err) => reportSnapshotError(err, OperationType.LIST, `teachers/${uid}/weeklyCheckins`)
+        )
+      );
+    } else {
+      setMyWeeklyCheckins([]);
+    }
+
+    // 15. Academic Team Weekly Meeting Votes (Tr YAO — Sunday 3-4 PM / 5-6 PM MMT / Other)
+    unsubs.push(
+      onSnapshot(
+        collection(db, 'weeklyMeetingVotes'),
+        (snap) => {
+          const list = snap.docs.map((d) => ({
+            ...(d.data() as WeeklyMeetingVote),
+            uid: d.id,
+          }));
+          list.sort((a, b) => (b.updatedAt?.toMillis?.() ?? 0) - (a.updatedAt?.toMillis?.() ?? 0));
+          setWeeklyMeetingVotes(list);
+        },
+        (err) => reportSnapshotError(err, OperationType.LIST, 'weeklyMeetingVotes')
+      )
+    );
 
     return () => {
       unsubs.forEach((u) => u());
@@ -677,6 +744,9 @@ export function HubProvider({ children }: { children: React.ReactNode }) {
     suggestions,
     syllabusEntries,
     notifications,
+    myWeeklyCheckins,
+    allWeeklyCheckins,
+    weeklyMeetingVotes,
     hasSampleData,
   };
 

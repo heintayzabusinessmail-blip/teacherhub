@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import {
   BookOpen,
   Calendar,
+  CalendarClock,
   CheckSquare,
   ClipboardList,
   Compass,
@@ -45,6 +46,7 @@ const ALL_NAV_ITEMS: NavItemDef[] = [
   { id: 'plan', label: 'About Me & Our Plan', shortLabel: 'About & Plan', icon: Compass, group: 'core' },
   { id: 'roadmap', label: '6-Month Roadmap', shortLabel: 'Roadmap', icon: Calendar, group: 'core' },
   { id: 'my-month-1', label: 'My Month 1', shortLabel: 'My M1', icon: CheckSquare, group: 'core' },
+  { id: 'meetings', label: 'Meetings', shortLabel: 'Meetings', icon: CalendarClock, group: 'core' },
   { id: 'team', label: 'Meet the Team', shortLabel: 'Team', icon: Users, group: 'team' },
   { id: 'resources', label: 'Resource Library', shortLabel: 'Library', icon: FolderOpen, group: 'team' },
   { id: 'training', label: 'Training', shortLabel: 'Training', icon: GraduationCap, group: 'team' },

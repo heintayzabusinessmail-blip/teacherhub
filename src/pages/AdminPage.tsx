@@ -46,6 +46,7 @@ import {
 } from '../utils/helpers';
 import { downloadMonth1ReportPdf } from '../utils/pdfExport';
 import { clearAllSampleData, seedFictionalSampleData } from '../utils/seedData';
+import { formatWeeklyOptionLabel } from './MeetingsPage';
 import type { ObservationDoc, UserRole } from '../types';
 
 type AdminSubTab =
@@ -76,6 +77,8 @@ export function AdminPage() {
     faqs,
     suggestions,
     syllabusEntries,
+    allWeeklyCheckins,
+    weeklyMeetingVotes,
     hasSampleData,
   } = useHub();
 
@@ -1330,10 +1333,139 @@ export function AdminPage() {
         </section>
       )}
 
-      {/* TAB 5: Needs Survey Results & Anonymous Suggestions */}
+      {/* TAB 5: Weekly Feedback, Meeting Poll, Needs Survey & Anonymous Suggestions */}
       {subTab === 'surveys' && (
-        <div className="grid lg:grid-cols-12 gap-5">
-          <section className="lg:col-span-7 bg-white dark:bg-[#1F1629] rounded-2xl border border-[#E5D9EC] dark:border-[#332442] p-5 shadow-sm space-y-4">
+        <div className="space-y-5">
+          {/* Weekly Teacher Feedback & Challenges (stored under /teachers/{uid}/weeklyCheckins) */}
+          <section className="bg-white dark:bg-[#1F1629] rounded-2xl border border-[#E5D9EC] dark:border-[#332442] p-5 shadow-sm space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h2 className="text-base font-bold text-[#1F122B] dark:text-[#F5EEF9]">
+                  Teacher Weekly Feedback &amp; Challenges ({allWeeklyCheckins.length})
+                </h2>
+                <p className="text-xs text-[#5A4A66] dark:text-[#BBAAC9]">
+                  Submitted privately by teachers from their My Month 1 page (stored under each
+                  teacher’s Firestore profile).
+                </p>
+              </div>
+              <span className="text-xs font-semibold text-[#A8567F] dark:text-[#D98EB3]">
+                {allWeeklyCheckins.filter((c) => c.mood === 'need_support').length} flagged “Need
+                support”
+              </span>
+            </div>
+
+            {allWeeklyCheckins.length === 0 ? (
+              <p className="text-sm text-[#5A4A66] dark:text-[#BBAAC9]">
+                No weekly feedback check-ins submitted yet.
+              </p>
+            ) : (
+              <div className="grid md:grid-cols-2 gap-3">
+                {allWeeklyCheckins.map((entry) => {
+                  const createdIso = entry.createdAt?.toDate?.()?.toISOString();
+                  const moodLabel =
+                    entry.mood === 'need_support'
+                      ? 'Need support'
+                      : entry.mood === 'okay'
+                        ? 'Managing okay'
+                        : 'Going well';
+                  const moodClass =
+                    entry.mood === 'need_support'
+                      ? 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/30 dark:text-rose-300 dark:border-rose-800/60'
+                      : entry.mood === 'okay'
+                        ? 'bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800/60'
+                        : 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-300 dark:border-emerald-800/60';
+                  return (
+                    <div
+                      key={`${entry.uid}_${entry.id}`}
+                      className="p-4 rounded-xl bg-[#FAF7FC] dark:bg-[#160F1F] border border-[#E5D9EC] dark:border-[#332442] space-y-2"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                          <span className="font-bold text-[#3B1050] dark:text-[#E2B8D0]">
+                            {entry.teacherName}
+                          </span>
+                          <span className="text-[#7A6888]">· {entry.weekLabel}</span>
+                          <span
+                            className={`px-2 py-0.5 rounded-md border text-[11px] font-semibold ${moodClass}`}
+                          >
+                            {moodLabel}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            deleteDoc(doc(db, 'teachers', entry.uid, 'weeklyCheckins', entry.id))
+                          }
+                          className="text-xs text-red-600 dark:text-red-400 hover:underline shrink-0"
+                        >
+                          Archive
+                        </button>
+                      </div>
+                      <p className="text-sm text-[#1F122B] dark:text-[#F5EEF9] whitespace-pre-line">
+                        {entry.challenges}
+                      </p>
+                      {entry.wins && (
+                        <p className="text-xs text-emerald-700 dark:text-emerald-400">
+                          <strong>Went well:</strong> {entry.wins}
+                        </p>
+                      )}
+                      {createdIso && (
+                        <p className="text-[11px] text-[#7A6888] dark:text-[#9D8AAD] tabular-nums">
+                          {formatLocalDateTime(createdIso)}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+
+          {/* Academic Team Weekly Meeting Poll Summary (Tr YAO) */}
+          <section className="bg-white dark:bg-[#1F1629] rounded-2xl border border-[#E5D9EC] dark:border-[#332442] p-5 shadow-sm space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-base font-bold text-[#1F122B] dark:text-[#F5EEF9]">
+                Academic Team Weekly Meeting Poll — Tr YAO ({weeklyMeetingVotes.length} votes)
+              </h2>
+              <span className="text-xs text-[#5A4A66] dark:text-[#BBAAC9]">
+                Sun 3–4 PM:{' '}
+                <strong>
+                  {weeklyMeetingVotes.filter((v) => v.selectedOption === 'sun_3_4_pm').length}
+                </strong>{' '}
+                · Sun 5–6 PM:{' '}
+                <strong>
+                  {weeklyMeetingVotes.filter((v) => v.selectedOption === 'sun_5_6_pm').length}
+                </strong>{' '}
+                · Other:{' '}
+                <strong>
+                  {weeklyMeetingVotes.filter((v) => v.selectedOption === 'other').length}
+                </strong>
+              </span>
+            </div>
+            {weeklyMeetingVotes.length === 0 ? (
+              <p className="text-sm text-[#5A4A66] dark:text-[#BBAAC9]">
+                No teachers have voted in the Meetings tab yet.
+              </p>
+            ) : (
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                {weeklyMeetingVotes.map((v) => (
+                  <div
+                    key={v.uid}
+                    className="p-3 rounded-xl bg-[#FAF7FC] dark:bg-[#160F1F] border border-[#E5D9EC] dark:border-[#332442] text-xs space-y-1"
+                  >
+                    <p className="font-bold text-[#3B1050] dark:text-[#E2B8D0]">{v.teacherName}</p>
+                    <p className="font-semibold text-[#1F122B] dark:text-[#F5EEF9]">
+                      {formatWeeklyOptionLabel(v.selectedOption, v.suggestedTime)}
+                    </p>
+                    {v.note && <p className="text-[#5A4A66] dark:text-[#BBAAC9]">{v.note}</p>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <div className="grid lg:grid-cols-12 gap-5">
+            <section className="lg:col-span-7 bg-white dark:bg-[#1F1629] rounded-2xl border border-[#E5D9EC] dark:border-[#332442] p-5 shadow-sm space-y-4">
             <h2 className="text-base font-bold text-[#1F122B] dark:text-[#F5EEF9]">
               Top Requested Support Topics ({allSurveys.length} responses)
             </h2>
@@ -1412,6 +1544,7 @@ export function AdminPage() {
               </div>
             )}
           </section>
+          </div>
         </div>
       )}
 
